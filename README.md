@@ -10,7 +10,7 @@ To install pip requirements, use command:
 pip install -r requirements.txt
 
 # Step 2:
-After installing requirments.txt, navigate to ...pythonpath/Lib/site-packages/openpyxl/drawing/image.py and replace the entire image.py script with the one from edit-openpyxl-image (in this repository)
+After installing requirments.txt, navigate to ...python path or virtualenv path/Lib/site-packages/openpyxl/drawing/image.py and replace the entire image.py script with the one from edit-openpyxl-image (in this repository)
 
 # Step 3:
 Install dependencies from the DEPENDENCIES folder in this repository. Required dependencies, (a) Hikvision MVS & (b) Microsoft Visual C++ 2015-2019 Redistributable

@@ -1,0 +1,15 @@
+numpy==1.19.3
+opencv-python==4.4.0.46
+Pillow==8.0.1
+pythonnet==2.5.1
+scikit-image==0.18.1
+scipy==1.6.0
+imutils==0.5.3
+pyinstaller==4.1
+matplotlib==3.3.3
+imageio==2.9.0
+openpyxl==3.0.7
+pathlib==1.0.1
+fonttools==4.28.3
+pyserial==3.5
+psutil==5.8.0

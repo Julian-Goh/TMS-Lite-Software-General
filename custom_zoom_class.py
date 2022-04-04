@@ -37,6 +37,7 @@ def int_type_bool(var):
 
 class CanvasImage():
     """ Display and zoom image """
+    Image.MAX_IMAGE_PIXELS = None  # suppress DecompressionBombError for the big image
     def __init__(self, placeholder, loaded_img = None, local_img_split = False, ch_index = 0): 
         """ Initialize the ImageFrame """
         self.imscale = 1.0  # scale for the canvas image zoom, public for outer classes
@@ -209,11 +210,6 @@ class CanvasImage():
             # when too many key stroke events in the same time
 
             self.canvas.bind('<Key>', lambda event: self.canvas.after_idle(self.key_stroke, event))
-            # Decide if this image huge or not
-            self.huge = False  # huge or not
-            self.huge_size = 14000  # define size of the huge image
-            self.band_width = 1024  # width of the tile band
-            Image.MAX_IMAGE_PIXELS = 1000000000  # suppress DecompressionBombError for the big image
 
             self.canvas.delete("all")
 
@@ -236,22 +232,15 @@ class CanvasImage():
                     self.ref_img_src['data'] = Image.fromarray(self.loaded_img)
 
             self.imwidth, self.imheight = self._IMG.size  # public for outer classes
-            if np.multiply(self.imwidth, self.imheight) > np.multiply(self.huge_size, self.huge_size) and \
-               self._IMG.tile[0][0] == 'raw':  # only raw images could be tiled
-                self.huge = True  # image is huge
-                self.offset = self._IMG.tile[0][2]  # initial tile offset
-                self.tile = [self._IMG.tile[0][0],  # it have to be 'raw'
-                               [0, 0, self.imwidth, 0],  # tile extent (a rectangle)
-                               self.offset,
-                               self._IMG.tile[0][3]]  # list of arguments to the decoder
+
             self.min_side = min(self.imwidth, self.imheight)  # get the smaller image side
 
             # Create image pyramid
             self.pyramid *= 0
-            self.pyramid = [self.smaller()] if self.huge else [self._IMG]
+            self.pyramid.append(self._IMG)
 
             # Set ratio coefficient for image pyramid
-            self.ratio = ( np.divide(max(self.imwidth, self.imheight), self.huge_size) )if self.huge else 1.0
+            self.ratio = 1.0
             self.curr_img = 0  # current image from the pyramid
             self.scale_factor = np.multiply(self.imscale, self.ratio)  # image pyramide scale
             self.reduction = 2  # reduction degree of image pyramid
@@ -280,8 +269,6 @@ class CanvasImage():
                 self.loaded_img = img
 
             if (isinstance(self.loaded_img, np.ndarray)) == True:
-                self.huge = False
-
                 self.local_img_split = local_img_split
                 self.ch_index = ch_index
 
@@ -303,19 +290,10 @@ class CanvasImage():
                         self.ref_img_src['data'] = Image.fromarray(self.loaded_img)
 
                 self.imwidth, self.imheight = self._IMG.size  # public for outer classes
-                if np.multiply(self.imwidth, self.imheight) > np.multiply(self.huge_size, self.huge_size) and \
-                   self._IMG.tile[0][0] == 'raw':  # only raw images could be tiled
-                    self.huge = True  # image is huge
-                    self.offset = self._IMG.tile[0][2]  # initial tile offset
-                    self.tile = [self._IMG.tile[0][0],  # it have to be 'raw'
-                                   [0, 0, self.imwidth, 0],  # tile extent (a rectangle)
-                                   self.offset,
-                                   self._IMG.tile[0][3]]  # list of arguments to the decoder
-
                 self.min_side = min(self.imwidth, self.imheight)  # get the smaller image side
 
                 self.pyramid *= 0
-                self.pyramid = [self.smaller()] if self.huge else [self._IMG]
+                self.pyramid.append(self._IMG)
 
                 w, h = self.pyramid[-1].size
                 while w > 512 and h > 512:  # top pyramid image is around 512 pixels in size
@@ -328,51 +306,8 @@ class CanvasImage():
 
                 if self.roi_item is not None:
                     self.canvas.itemconfig(self.roi_item)
-
             #self.canvas.focus_set()  # set focus on the canvas
             #NOTE if focus is not set, cannot use AWSD or left,up,down,right arrow key to move the image
-
-
-    def smaller(self):
-        """ Resize image proportionally and return smaller image """
-        w1, h1 = self.imwidth, self.imheight
-        w2, h2 = self.huge_size, self.huge_size
-        aspect_ratio1 = np.divide(w1, h1)
-        aspect_ratio2 = np.divide(w2, h2)  # it equals to 1.0
-        if aspect_ratio1 == aspect_ratio2:
-            k = np.divide(h2, h1)  # compression ratio
-            w = int(w2)  # band length
-            image = Image.new('RGB', (int(w2), int(h2)))
-        elif aspect_ratio1 > aspect_ratio2:
-            k = np.divide(h2, w1)  # compression ratio
-            w = int(w2)  # band length
-            image = Image.new('RGB', (int(w2), int(np.divide(w2, aspect_ratio1) )))
-        else:  # aspect_ratio1 < aspect_ration2
-            k = np.divide(h2, h1)  # compression ratio
-            w = int(np.multiply(h2, aspect_ratio1))  # band length
-            image = Image.new('RGB', ( w , int(h2)))
-
-        i, j, n = 0, 1, round(0.5 + np.divide(self.imheight, self.band_width))
-        while i < self.imheight:
-            # print('\rOpening image: {j} from {n}'.format(j=j, n=n), end='')
-            band = min(self.band_width, self.imheight - i)  # width of the tile band
-            self.tile[1][3] = band  # set band width
-            self.tile[2] = self.offset + np.multiply(self.imwidth, np.multiply(i, 3))  # tile offset (3 bytes per pixel)
-            self._IMG.close()
-
-            if self.local_img_split == True and len(self.loaded_img.shape) > 2:
-                self._IMG = Image.fromarray(self.loaded_img[:,:, self.ch_index])
-            else:
-                self._IMG = Image.fromarray(self.loaded_img)
-
-            self._IMG.size = (self.imwidth, band)  # set size of the tile band
-            self._IMG.tile = [self.tile]  # set tile
-            cropped = self._IMG.crop((0, 0, self.imwidth, band))  # crop tile band
-            image.paste(cropped.resize((w, int( np.multiply(band, k) )+1), self.filter), (0, int( np.multiply(i, k) ) ))
-            i += band
-            j += 1
-        # print('\r' + 30*' ' + '\r', end='')  # hide printed string
-        return image
 
     def redraw_figures(self):
         """ Dummy function to redraw figures in the children classes """
@@ -560,23 +495,7 @@ class CanvasImage():
     def crop(self, bbox):
         """ Crop rectangle from the image and return it """
         #print('cropping')
-        if self.huge:  # image is huge and not totally in RAM
-            band = bbox[3] - bbox[1]  # width of the tile band
-            self.tile[1][3] = band  # set the tile height
-            self.tile[2] = self.offset + self.imwidth * bbox[1] * 3  # set offset of the band
-            self._IMG.close()
-            
-            # self._IMG = Image.fromarray(self.loaded_img)
-            if self.local_img_split == True and len(self.loaded_img.shape) > 2:
-                self._IMG = Image.fromarray(self.loaded_img[:,:, self.ch_index])
-            else:
-                self._IMG = Image.fromarray(self.loaded_img)
-
-            self._IMG.size = (self.imwidth, band)  # set size of the tile band
-            self._IMG.tile = [self.tile]
-            return self._IMG.crop((bbox[0], 0, bbox[2], band))
-        else:  # image is totally in RAM
-            return self.pyramid[0].crop(bbox)
+        return self.pyramid[0].crop(bbox)
 
     def destroy(self):
         """ ImageFrame destructor """
@@ -622,34 +541,21 @@ class CanvasImage():
                 
                 try:
                     if int(x2 - x1) > 0 and int(y2 - y1) > 0:  # show image if it in the visible area
-                        if self.huge and self.curr_img < 0:  # show huge image
-                            h = int(  np.divide((y2 - y1), self.imscale)  )  # height of the tile band
-                            self.tile[1][3] = h  # set the tile band height
-                            self.tile[2] = self.offset + np.multiply( self.imwidth,  np.multiply(int(np.divide(y1, self.imscale)), 3) )
-                            self._IMG.close()
-                            
-                            self._IMG.size = (self.imwidth, h)  # set size of the tile band
-                            self._IMG.tile = [self.tile]
-                            image = self._IMG.crop((int(np.divide(x1, self.imscale)), 0, int(np.divide(x2, self.imscale)), h))
+                        image = self.pyramid[max(0, self.curr_img)].crop(  # crop current img from pyramid
+                                            (int(np.divide(x1, self.scale_factor)), int(np.divide(y1, self.scale_factor)),
+                                             int(np.divide(x2, self.scale_factor)), int(np.divide(y2, self.scale_factor)) ))
 
-                            self.crop_offset = (int(np.divide(x1, self.imscale)), 0, int(np.divide(x2, self.imscale)), h)
-                            # print('offset Huge img: ', self.crop_offset)
-                        else:  # show normal image
-                            image = self.pyramid[max(0, self.curr_img)].crop(  # crop current img from pyramid
-                                                (int(np.divide(x1, self.scale_factor)), int(np.divide(y1, self.scale_factor)),
-                                                 int(np.divide(x2, self.scale_factor)), int(np.divide(y2, self.scale_factor)) ))
+                        self.crop_offset = (int(np.divide(x1, self.scale_factor)), int(np.divide(y1, self.scale_factor)),
+                                             int(np.divide(x2, self.scale_factor)), int(np.divide(y2, self.scale_factor)) )
 
-                            self.crop_offset = (int(np.divide(x1, self.scale_factor)), int(np.divide(y1, self.scale_factor)),
-                                                 int(np.divide(x2, self.scale_factor)), int(np.divide(y2, self.scale_factor)) )
-
-                            # print('offset normal img: ', self.crop_offset)
+                        # print('offset normal img: ', self.crop_offset)
 
                         if str(image.mode) != 'RGB':
                             self.draw_save_img = self._IMG.convert('RGB')# image.convert('RGB')
 
                         elif str(image.mode) == 'RGB':
                             self.draw_save_img = self._IMG.copy()# image
-
+                            
                         imagetk = ImageTk.PhotoImage(image.resize((int(x2 - x1), int(y2 - y1)), self.filter))
                         imageid = self.canvas.create_image(max(box_canvas[0], box_img_int[0]),
                                                            max(box_canvas[1], box_img_int[1]),

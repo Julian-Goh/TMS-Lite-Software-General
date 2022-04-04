@@ -29,7 +29,6 @@ class ScrolledCanvas():
         self.canvas['width'] = frame_w
         self.canvas['height'] = frame_h
         #self.canvas.place(x=self.canvas_x, y=self.canvas_y,  relheight=1, relwidth=1, anchor = 'nw')
-        #print(Frame)
         self.window_fr = tk.Frame(self.canvas, highlightthickness = 0, bg = self.window_bg)
         self.window_fr['width'] = frame_w
         self.window_fr['height'] = frame_h
@@ -65,8 +64,8 @@ class ScrolledCanvas():
 
     def on_resize(self, event):
         # print('self.frame_w, self.frame_h: ', self.frame_w, self.frame_h)
+        # print(event)
         # print('event.width, event.height: ', event.width, event.height)
-
         self.resize_event_h = int(event.height)
         self.resize_event_w = int(event.width)
 
@@ -122,7 +121,7 @@ class ScrolledCanvas():
         # print(self.window_fr['width'], self.canvas['width'])
 
     def _bound_to_mousewheel(self,event):
-        #print('Enter')
+        # print('Enter')
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
     def _unbound_to_mousewheel(self, event):

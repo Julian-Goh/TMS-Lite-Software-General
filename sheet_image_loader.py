@@ -3,7 +3,7 @@ Contains a SheetImageLoader class that allow you to loadimages from a sheet
 """
 import io
 import string
-
+import operator
 from PIL import Image
 
 from openpyxl.utils.cell import get_column_letter
@@ -69,33 +69,48 @@ def xl_col_label_char(num):
 class SheetImageLoader():
     """Loads all images in a sheet"""
     # _images = {} #Bad method of initializing a variable. Will cause previous data from previous sheet to carry over if SheetImageLoader class is used more than once. 
-    def __init__(self, sheet, sort_bool = False):
+    def __init__(self, sheet, sort_col_bool = False, sort_row_bool = False):
         """Loads all sheet images"""
+        if type(sort_col_bool) != bool or type(sort_row_bool) != bool:
+            raise ValueError("both 'sort_col_bool' and 'sort_row_bool' must be bool-type(s), respectively.")
+
         sheet_images = sheet._images
+        sort_bool = operator.xor(sort_col_bool, sort_row_bool)
+
         if sort_bool == True:
             __temp = {}
-            __sort_id = {}
+            __sort_row_id = {}
+            __sort_col_id = {}
 
             for image in sheet_images:
                 row = image.anchor._from.row + 1
+                # print('image.anchor._from.col: ', image.anchor._from.col)
                 col = xl_col_label_char(image.anchor._from.col + 1)
                 __temp[f'{col}{row}'] = image
-                __sort_id[f'{col}{row}'] = np.array([image.anchor._from.col + 1, image.anchor._from.row + 1])
+                __sort_col_id[f'{col}{row}'] = image.anchor._from.col + 1
+                __sort_row_id[f'{col}{row}'] = image.anchor._from.row + 1
 
-            sorted(__sort_id, key = lambda row:row[1])
-            sorted(__sort_id, key = lambda col:col[0])
+            __sort_col_id = {k: v for k, v in sorted(__sort_col_id.items(), key=lambda item: item[1])}
+            __sort_row_id = {k: v for k, v in sorted(__sort_row_id.items(), key=lambda item: item[1])}
+            
+            # print(__sort_col_id)
+            # print(__sort_row_id)
+            if sort_col_bool == True and sort_row_bool == False:
+                self._images = OrderedDict(sorted(__temp.items(),       key = lambda row_id:__sort_row_id[row_id[0]]))
+                self._images = OrderedDict(sorted(self._images.items(), key = lambda col_id:__sort_col_id[col_id[0]]))
 
-            del sheet_images
+            elif sort_col_bool == False and sort_row_bool == True:
+                self._images = OrderedDict(sorted(__temp.items(),       key = lambda col_id:__sort_col_id[col_id[0]]))
+                self._images = OrderedDict(sorted(self._images.items(), key = lambda row_id:__sort_row_id[row_id[0]]))
 
-            self._images = OrderedDict()
+            # print(list(self._images.keys()))
 
-            for key, _ in __sort_id.items():
-                self._images[key] = __temp[key]
-
-            del __sort_id
-            del __temp
+            del sheet_images, __sort_col_id, __sort_row_id, __temp
 
         else:
+            if sort_col_bool == True and sort_row_bool == True:
+                raise Exception("Cannot perform sorting. Both 'sort_col_bool' and 'sort_row_bool' CANNOT be True at a time.")
+
             self._images = {}
             for image in sheet_images:
                 # print(image.anchor._from.row, image.anchor._from.col)

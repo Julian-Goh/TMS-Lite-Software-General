@@ -78,3 +78,4 @@ if __name__ == '__main__':
 
     main_window.protocol("WM_DELETE_WINDOW", main_panel.close_all)
     main_window.mainloop()
+    

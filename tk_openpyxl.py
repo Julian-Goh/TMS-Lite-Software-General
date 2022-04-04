@@ -26,11 +26,11 @@ from PIL import Image, ImageFont
 import numpy as np
 import copy
 
-from imageio import imread
-
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.utils.units import pixels_to_EMU, cm_to_EMU
+
+from os_create_folder import create_save_folder
 
 p2e = pixels_to_EMU
 c2e = cm_to_EMU
@@ -45,29 +45,12 @@ for i in range(0, 26):
 
 del curr_char
 
-# import cv2
-# print(os.getcwd())
-# print(os.getcwd().split('\\'))
-# print( os.getcwd().strip('\\' + (os.getcwd().split('\\')[-1])) )
 
 def type_int(arg):
     if (type(arg)) == int or (isinstance(arg, np.integer) == True):
         return True
     else:
         return False
-
-def create_save_folder():
-    PATH = os.getcwd()
-    create_folder = PATH + r'\TMS_Saved_Reports'
-    #print(create_folder)
-    print
-    if path.exists(create_folder):
-        #print ('File already exists')
-        pass
-    else:
-        os.mkdir(create_folder)
-        #print ('File created')
-    return create_folder
 
 def getTextWidth(ttfont_obj, text, pointSize, glyph_set = None, font_cmap = None, units_per_em = None):
     if glyph_set is None:
@@ -129,6 +112,7 @@ def round_float(value, place = 2):
     return float(f'{value:.{place}f}')
 
 def xl_col_label_num(char):
+    ### Excel 2007-2010 column range is: 'A' to 'XFD'#A = 1, #XFD = 16,384
     col_num = None
     try:
         if len(char) == 1:
@@ -152,6 +136,7 @@ def xl_col_label_num(char):
 
 
 def xl_col_label_char(num):
+    ### Excel 2007-2010 column range is: 'A' to 'XFD'#A = 1, #XFD = 16,384
     col_char = None
     if (type(num) == int or isinstance(num, np.integer) == True):
         if num > 0:
@@ -162,7 +147,7 @@ def xl_col_label_char(num):
                 if remainder == 0:
                     remainder = 26
                     num -= 1
-                char_list.append(chr(num+64))
+                char_list.append(chr(remainder+64))
 
             col_char = ''.join(reversed(char_list))
 
@@ -479,8 +464,9 @@ def set_outer_border(ws, border_type = 'default', border_style = 'medium'
     iter_rows_obj = ws.iter_rows(min_row=min_row, max_row=max_row
         , min_col=min_col, max_col=max_col, values_only=values_only)
 
-
+    # print(col_separator)
     col_separator = compute_col_separator(col_separator)
+    # print(col_separator)
     # row_separator = compute_row_separator(row_separator)
     # print('col_separator: ', col_separator)
     # print('min_row, max_row: ', min_row, max_row)
@@ -700,7 +686,7 @@ def set_outer_border(ws, border_type = 'default', border_style = 'medium'
                     del j
 
                     
-        elif border_type is None:
+        elif border_type is None: # Clear all borders from cell(s)
             for c in row:
                 c.border = Border(top = Side(border_style=None)
                             , bottom = Side(border_style=None)
@@ -837,21 +823,19 @@ class XL_WorkBook():
         self.glyph_set = self.ref_font.getGlyphSet()
         self.units_per_em = self.ref_font['head'].unitsPerEm
 
-        self.unit_char_width = getTextWidth(self.ref_font, '0', 16, glyph_set = self.glyph_set, font_cmap = self.font_cmap, units_per_em = self.units_per_em)
+        self.font_size = 16
+        self.unit_char_width = getTextWidth(self.ref_font, '0', self.font_size, glyph_set = self.glyph_set, font_cmap = self.font_cmap, units_per_em = self.units_per_em)
         # print(self.unit_char_width)
 
         self.width_font_factor = np.array([1.8, 1.67], dtype = np.float16) #This is only applicable for Arial font 16!! #1st value is used for 1st and last char, else use 2nd-value
         # print(self.width_font_factor)
         self.height_font_factor = np.divide(21, 15) #This is only applicable for Arial font 16!!
 
-        # self.xl_get_row_height(None, start_num = 1, end_num = 1)
-        # print(custom_col_char_dict)
-        # print(xl_col_label_num('XFD')) #XFD = 16,384
-        # col_num = xl_col_label_num('XFD')
-        # print(get_column_letter(col_num))
+        self.__save_dir = os.path.join(os.environ['USERPROFILE'], "TMS_Saved_Reports")
 
         self.__height_cm_xlunit_ratio = np.divide(0.51, 14.4)
         self.__width_cm_xlunit_ratio = np.divide(1.65, 8)
+        self.__xl_img_cm_tolerance = 0.15 #0.3 ### IMPORTANT! Tolerance value: 0.3cm, If Image covers a cell by 0.3cm, user can still view text(s) inside the cell.
 
         self.workbook = None
         self.worksheet = None
@@ -860,6 +844,8 @@ class XL_WorkBook():
         self._init_row_num = 2
 
     def xl_get_column_width(self, worksheet, start_char = 'A', end_char = None):
+        #### This function returns (a) the width, and (b) number of columns
+
         if start_char is not None and end_char is not None:
             start_col_num = xl_col_label_num(start_char)
             end_col_num = xl_col_label_num(end_char)
@@ -877,7 +863,7 @@ class XL_WorkBook():
                         curr_char = get_column_letter(i)
                         column_width = column_width + worksheet.column_dimensions[curr_char].width - 0.78
                     # print(column_width)
-                    return column_width, (end_col_num - start_col_num + 1) #return the width, and number of columns
+                    return column_width, (end_col_num - start_col_num + 1) 
             else:
                 raise ValueError("start_char and end_char must be an alphabetical string 'from A to Z', respectively.")
 
@@ -934,6 +920,7 @@ class XL_WorkBook():
         return None, None
 
     def xl_set_column_width(self, worksheet, start_char = 'A', end_char = 'A', col_width = 8.78):
+
         start_col_num = xl_col_label_num(start_char)
         end_col_num = xl_col_label_num(end_char)
 
@@ -1114,7 +1101,8 @@ class XL_WorkBook():
             raise Exception("The current Excel File does not have '{}' worksheet".format(sheet_name))
 
     def xl_save_workbook(self, file_path = None):
-        report_folder = create_save_folder()
+        
+        report_folder = create_save_folder(folder_dir = self.__save_dir)
         # print('file_path: ', file_path)
         if file_path is None:
             save_file, error_event = self.xl_file_save(report_folder, self.workbook, 'Report', '.xlsx')
@@ -1151,7 +1139,7 @@ class XL_WorkBook():
 
         return event_error
 
-    def xl_load_workbook(self, file_path, sheet_name = None, new_ws_bool = False):
+    def xl_update_workbook(self, file_path, sheet_name = None, new_ws_bool = False):
         self.workbook = load_workbook(file_path)
 
         if new_ws_bool == False:
@@ -1170,8 +1158,7 @@ class XL_WorkBook():
                 raise AttributeError("Please insert a 'sheet_name' into this function if you want to create a new worksheet."
                     + "\n'sheet_name' is a str-type.")
 
-        # print('Load Existing (Before): ', self.xl_get_column_width(self.worksheet, 'B', 'F'))
-        # Have to Set this Default Width for Some of this Columns....
+        # Have to Set this Default Width for Some of these Columns....
         self.xl_set_column_width(self.worksheet, 'B', 'F')
         self.xl_set_column_width(self.worksheet, 'G', 'L')
         self.xl_set_column_width(self.worksheet, 'Q', 'V')
@@ -1180,55 +1167,57 @@ class XL_WorkBook():
 
         self.xl_set_column_width(self.worksheet, 'AI', 'AN')
 
-        # print('Load Existing (After): ', self.xl_get_column_width(self.worksheet, 'B', 'F'))
-        # print('self.worksheet.max_row: ', self.worksheet.max_row)
-        # print(get_maximum_rows(self.worksheet))
+        self.xl_init_workbook(init_row_num = 2, init_col_char = 'A')
 
-        if self.worksheet.max_row < 39:
-            row_measure_dict = self.init_xl_data_id(init_row_num = 2, init_col_char = 'A')
-        else:
-            cusum_height = 0 #cumulative sum
-            row_measure_dict = {}
-            row_measure_dict[str(0)] = 0        
-            for i in range(1, self.worksheet.max_row + 1):
-                row_height, _ = self.xl_get_row_height(self.worksheet, i)
-                cusum_height = cusum_height + row_height
-                row_measure_dict[str(i)] = round_float(np.multiply(cusum_height, self.__height_cm_xlunit_ratio), 2)
-
-
-        return row_measure_dict, sheet_name
+        return sheet_name
 
     def xl_image_clear_all(self):
         self.worksheet._images *= 0
 
-    def xl_read_image(self, ws, sort_bool = False):
-        return SheetImageLoader(ws, sort_bool)
+    def xl_read_image(self, ws, sort_col_bool = False, sort_row_bool = False):
+        return SheetImageLoader(ws, sort_col_bool, sort_row_bool)
 
-    def init_xl_data_id(self, init_row_num = 1, init_col_char = 'A'):
+    def xl_init_workbook(self, init_row_num = 1, init_col_char = 'A'):
+        '''
+            Only use xl_init_workbook() before inserting new data to Excel worksheet!!
+        '''
+
+        __ws_max_row = 39 ## Maximum row for TMS-Lite Lab Specification Report
+
         self.xl_set_column_width(self.worksheet, 'A', 'AN') #Initialize all the column width size! Otherwise xl_get_column_width will return weird column width when cell is empty
 
         self.worksheet.merge_cells('A2:F2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'A', max_col='F')
 
-        self.cell_insert_data(self.worksheet, 'Client Photo Sample', 'string', 'A2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Client Photo Sample', 'string', 'A2', auto_fit_col = False, auto_fit_row = False)
 
         self.worksheet.merge_cells('B3:F3')
+        set_outer_border(ws = self.worksheet, min_row = 3, min_col = 'A')
         set_outer_border(ws = self.worksheet, min_row = 3, min_col = 'B', max_col='F')
 
-        self.cell_insert_data(self.worksheet, 'Dimension: ', 'string', 'A3'
+        self.cell_insert_data(self.worksheet, 'Dimension(mm): ', 'string', 'A3'
+            , auto_fit_override = (True, True)
+            , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
+
+        self.worksheet.merge_cells('B4:F4')
+        set_outer_border(ws = self.worksheet, min_row = 4, min_col = 'A')
+        set_outer_border(ws = self.worksheet, min_row = 4, min_col = 'B', max_col='F')
+
+        self.cell_insert_data(self.worksheet, 'Background: ', 'string', 'A4'
+            , auto_fit_override = (False, True)
             , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
         # self.worksheet.merge_cells('A4:F39')
-        set_outer_border(ws = self.worksheet, min_row = 4, max_row = 39, min_col = 'A', max_col='F')
+        set_outer_border(ws = self.worksheet, min_row = 5, max_row = 39, min_col = 'A', max_col='F')
         #####################################################################################################
 
         self.worksheet.merge_cells('G2:L2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'G', max_col='L')
-        self.cell_insert_data(self.worksheet, 'Lighting Drawing', 'string', 'G2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Lighting Drawing', 'string', 'G2', auto_fit_col = False, auto_fit_row = False)
 
         self.worksheet.merge_cells('G3:L3')
         set_outer_border(ws = self.worksheet, min_row = 3, max_row = 39, min_col = 'G', max_col='L')
-        self.cell_insert_data(self.worksheet, 'LIGHTING SERIES', 'string', 'G3', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'LIGHTING SERIES', 'string', 'G3', auto_fit_col = False, auto_fit_row = False)
         #####################################################################################################
         set_outer_border(ws = self.worksheet, min_row = 2, max_row = 39, min_col = 'M', max_col='P')
         self.worksheet.column_dimensions['M'].width = 25
@@ -1238,12 +1227,12 @@ class XL_WorkBook():
         self.worksheet.merge_cells('M2:P2')
 
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'M', max_col = 'P')
-        self.cell_insert_data(self.worksheet, 'Specification', 'string', 'M2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Specification', 'string', 'M2', auto_fit_col = False, auto_fit_row = False)
 
         self.worksheet.merge_cells('M3:P3')
         set_outer_border(ws = self.worksheet, min_row = 3, min_col = 'M', max_col='P')
 
-        self.cell_insert_data(self.worksheet, "Note rows with '*' must be filled.", 'string', 'M3', auto_fit = False
+        self.cell_insert_data(self.worksheet, "Note rows with '*' must be filled.", 'string', 'M3', auto_fit_col = False, auto_fit_row = False
             , font_dict = dict(name='Arial',
             size=16,
             bold=False,
@@ -1261,7 +1250,7 @@ class XL_WorkBook():
 
         self.worksheet.merge_cells('M4:N4')
         set_outer_border(ws = self.worksheet, min_row = 4, min_col = 'M', max_col='N')
-        self.cell_insert_data(self.worksheet, 'Testing Criteria', 'string', 'M4', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Testing Criteria', 'string', 'M4', auto_fit_col = False, auto_fit_row = False)
 
         set_outer_border(ws = self.worksheet, min_row = 4, min_col = 'O')
         self.cell_insert_data(self.worksheet, 'Length', 'string', 'O4')
@@ -1271,11 +1260,12 @@ class XL_WorkBook():
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'M', max_col='N', border_style = 'thin')
 
             self.cell_insert_data(self.worksheet, test_criteria_table[list_index]
-                , 'string', 'M' + str(i), auto_fit = False
+                , 'string', 'M' + str(i), auto_fit_col = False, auto_fit_row = False
                 , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'O', border_style  = 'thin')
             self.cell_insert_data(self.worksheet, '*', 'string', 'P' + str(i)
+                , auto_fit_override = (False, True)
                 , font_dict = dict(name='Arial',
                 size=16,
                 bold=False,
@@ -1297,7 +1287,8 @@ class XL_WorkBook():
         for list_index, i in enumerate(range(12, 12+len(light_model_table))):
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'M', border_style = 'thin')
             self.cell_insert_data(self.worksheet, light_model_table[list_index]
-                , 'string', 'M' + str(i) 
+                , 'string', 'M' + str(i)
+                , auto_fit_override = (False, True)
                 , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'N', border_style = 'thin')
@@ -1312,7 +1303,8 @@ class XL_WorkBook():
         for list_index, i in enumerate(range(17, 17+len(ctrl_model_table))):
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'M', border_style = 'thin')
             self.cell_insert_data(self.worksheet, ctrl_model_table[list_index]
-                , 'string', 'M' + str(i) 
+                , 'string', 'M' + str(i)
+                , auto_fit_override = (False, True)
                 , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'N', border_style = 'thin')
@@ -1328,7 +1320,8 @@ class XL_WorkBook():
         for list_index, i in enumerate(range(22, 22+len(camera_model_table))):
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'M', border_style = 'thin')
             self.cell_insert_data(self.worksheet, camera_model_table[list_index]
-                , 'string', 'M' + str(i) 
+                , 'string', 'M' + str(i)
+                , auto_fit_override = (False, True)
                 , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'N', border_style = 'thin')
@@ -1353,7 +1346,8 @@ class XL_WorkBook():
         for list_index, i in enumerate(range(33, 33+len(lens_model_table))):
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'M', border_style = 'thin')
             self.cell_insert_data(self.worksheet, lens_model_table[list_index]
-                , 'string', 'M' + str(i) 
+                , 'string', 'M' + str(i)
+                , auto_fit_override = (False, True)
                 , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
 
             set_outer_border(ws = self.worksheet, min_row = i, min_col = 'N', border_style = 'thin')
@@ -1373,48 +1367,30 @@ class XL_WorkBook():
         set_outer_border(ws = self.worksheet, min_row = 3, max_row = 39, min_col = 'Q', max_col = 'V')
         self.worksheet.merge_cells('Q2:V2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'Q', max_col = 'V')
-        self.cell_insert_data(self.worksheet, 'Targeted Image', 'string', 'Q2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Targeted Image', 'string', 'Q2', auto_fit_col = False, auto_fit_row = False)
 
         #####################################################################################################
         set_outer_border(ws = self.worksheet, min_row = 3, max_row = 39, min_col = 'W', max_col = 'AB')
         self.worksheet.merge_cells('W2:AB2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'W', max_col = 'AB')
-        self.cell_insert_data(self.worksheet, 'Grayscale', 'string', 'W2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Grayscale', 'string', 'W2', auto_fit_col = False, auto_fit_row = False)
         
         #####################################################################################################
         set_outer_border(ws = self.worksheet, min_row = 3, max_row = 39, min_col = 'AC', max_col = 'AH')
         self.worksheet.merge_cells('AC2:AH2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'AC', max_col = 'AH')
-        self.cell_insert_data(self.worksheet, 'Binary', 'string', 'AC2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Binary', 'string', 'AC2', auto_fit_col = False, auto_fit_row = False)
 
         #####################################################################################################
         set_outer_border(ws = self.worksheet, min_row = 3, max_row = 39, min_col = 'AI', max_col = 'AN')
         self.worksheet.merge_cells('AI2:AN2')
         set_outer_border(ws = self.worksheet, min_row = 2, min_col = 'AI', max_col = 'AN')
-        self.cell_insert_data(self.worksheet, 'Setup', 'string', 'AI2', auto_fit = False)
+        self.cell_insert_data(self.worksheet, 'Setup', 'string', 'AI2', auto_fit_col = False, auto_fit_row = False)
         
         # print('self.worksheet.max_row: ', self.worksheet.max_row)
-        cusum_height = 0 #cumulative sum
-        row_measure_dict = {}
-        row_measure_dict[str(0)] = 0        
-        for i in range(1, self.worksheet.max_row + 1):
-            row_height, _ = self.xl_get_row_height(self.worksheet, i)
-            cusum_height = cusum_height + row_height
-            row_measure_dict[str(i)] = round_float(np.multiply(cusum_height, self.__height_cm_xlunit_ratio), 2)
-
-        return row_measure_dict
 
     def cell_insert_img(self, ws, img, row_num, start_col = 'A', end_col = None
-        , check_row_num = 1, check_col_char = 'A', row_measure_dict = {}, get_text_cell_id = False):
-
-        if row_measure_dict is None:
-            raise Exception("'row_measure_dict' is None. Please enter the 'row_measure_dict' argument")
-
-        elif row_measure_dict is not None and type(row_measure_dict) == dict:
-            if len(row_measure_dict) > 0:
-                pass
-            else:
-                raise Exception("'row_measure_dict' is empty. Please initialize a new workbook to generate a 'row_measure_dict' with measurement of each rows for computation")
+        , check_row_num = 1, check_col_char = 'A', get_text_cell_id = False):
 
         if end_col is None:
             end_col = start_col
@@ -1432,6 +1408,18 @@ class XL_WorkBook():
             imwidth = self.cell_compute_imwidth(ws, start_col, end_col)
 
             cell_id = start_col + str(row_num)
+
+            CHECK_cell_id = check_col_char + str(int(check_row_num))
+
+            img_exist_dict = self.cell_check_img(ws, CHECK_cell_id, imwidth)
+            # print(img_exist_dict.items())
+            if len(img_exist_dict) > 0:
+                ## Calculating the new starting cell id for img anchor...
+                new_cell_id, _, _ = self.__cell_next_anchor_img(ws, cell_id = cell_id, img_exist_dict = img_exist_dict, img_spacing = padding_space)
+
+            else:
+                new_cell_id = cell_id
+
             # print('imwidth: ', imwidth, 'col_width: ', col_width)
             img_obj = openpyxl.drawing.image.Image(img) #data can be a path to the img in string, or np.array img matrix
 
@@ -1441,19 +1429,17 @@ class XL_WorkBook():
 
             img_cm_size = (width_cm, height_cm)
 
-            self.cell_anchor_img(ws, img_obj, cell_id, imwidth, start_col_num, row_num)
+            self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth)
 
             ws.add_image(img_obj) # adding in the image
 
-            new_max_row = self.ws_check_row_height_v1(ws, cell_id, int(list(row_measure_dict.keys())[-1]), row_measure_dict, img_cm_size, pad_space = padding_space)
-
-            # print("Numpy: ", new_max_row)
+            _, imtext_cell_id, new_max_row = \
+            self.__cell_next_anchor_img(ws, cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
 
             del width_cm, height_cm, img_cm_size
 
             if get_text_cell_id == True:
-                text_cell_id = start_col + str(new_max_row - padding_space + 1)
-                text_cell_id_list.append(text_cell_id)
+                text_cell_id_list.append(imtext_cell_id)
 
         elif type(img) == str:
             if os.path.isfile(img) == False:
@@ -1468,6 +1454,17 @@ class XL_WorkBook():
 
                 cell_id = start_col + str(row_num)
 
+                CHECK_cell_id = check_col_char + str(int(check_row_num))
+
+                img_exist_dict = self.cell_check_img(ws, CHECK_cell_id, imwidth)
+                # print(img_exist_dict.items())
+                if len(img_exist_dict) > 0:
+                    ## Calculating the new starting cell id for img anchor...
+                    new_cell_id, _, _ = self.__cell_next_anchor_img(ws, cell_id = cell_id, img_exist_dict = img_exist_dict, img_spacing = padding_space)
+
+                else:
+                    new_cell_id = cell_id
+
                 # print('imwidth: ', imwidth, 'col_width: ', col_width)
                 img_obj = openpyxl.drawing.image.Image(img) #data can be a path to the img in string, or np.array img matrix
 
@@ -1477,19 +1474,19 @@ class XL_WorkBook():
 
                 img_cm_size = (width_cm, height_cm)
 
-                self.cell_anchor_img(ws, img_obj, cell_id, imwidth, start_col_num, row_num)
+                self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth)
 
                 ws.add_image(img_obj) # adding in the image
 
-                new_max_row = self.ws_check_row_height_v1(ws, cell_id, int(list(row_measure_dict.keys())[-1]), row_measure_dict, img_cm_size, pad_space = padding_space)
+                _, imtext_cell_id, new_max_row = \
+                self.__cell_next_anchor_img(ws, cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
 
                 # print("IMG PATH: ", new_max_row)
 
                 del width_cm, height_cm, img_cm_size
 
                 if get_text_cell_id == True:
-                    text_cell_id = start_col + str(new_max_row - padding_space + 1)
-                    text_cell_id_list.append(text_cell_id)
+                    text_cell_id_list.append(imtext_cell_id)
 
         elif type(img) == dict or type(img) == list or isinstance(img, OrderedDict):
             start_col_num = xl_col_label_num(start_col)
@@ -1500,16 +1497,13 @@ class XL_WorkBook():
 
             cell_id = start_col + str(row_num)
             
-            check_cells_id = check_col_char + str(int(check_row_num))
+            CHECK_cell_id = check_col_char + str(int(check_row_num))
 
-            # img_exist_dict = self.cell_check_img(ws, check_cells_id, imwidth, ws.max_row - int(check_row_num) + 1)
-            img_exist_dict = self.cell_check_img(ws, check_cells_id, imwidth, int(list(row_measure_dict.keys())[-1]) - int(check_row_num) + 1)
-            # print(row_measure_dict)
+            img_exist_dict = self.cell_check_img(ws, CHECK_cell_id, imwidth)
             # print(img_exist_dict.items())
             if len(img_exist_dict) > 0:
                 ## Calculating the new starting cell id for img anchor...
-                new_cell_id = self.cell_next_anchor_img_v1(ws, row_measure_dict, max_row = int(list(row_measure_dict.keys())[-1])
-                    , cell_id = cell_id, img_exist_dict = img_exist_dict, img_spacing = padding_space)
+                new_cell_id, _, _ = self.__cell_next_anchor_img(ws, cell_id = cell_id, img_exist_dict = img_exist_dict, img_spacing = padding_space)
 
             else:
                 new_cell_id = cell_id
@@ -1519,9 +1513,6 @@ class XL_WorkBook():
                     # img_no = 0 #image number. if a list is provided, this is used to track the img no.
                     # for img_no, imdata in enumerate(img):
                     for imdata in img:
-                        # print('new_cell_id: ', new_cell_id)
-                        img_col_char = start_col #re.findall('(\\D+)', new_cell_id)[0]
-                        img_row_num = int(re.findall('(\\d+)', new_cell_id)[0])
                         if type(imdata) == str or (isinstance(imdata, np.ndarray) == True) or (isinstance(imdata, openpyxl.drawing.image.Image) == True):
                             if type(imdata) == str or (isinstance(imdata, np.ndarray) == True):
                                 img_obj = openpyxl.drawing.image.Image(imdata)
@@ -1535,31 +1526,21 @@ class XL_WorkBook():
 
                             img_cm_size = (width_cm, height_cm)
 
-                            self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth
-                                , start_col_num = xl_col_label_num(img_col_char), row_num = img_row_num)
+                            self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth)
 
                             ws.add_image(img_obj)
 
-                            new_max_row = self.ws_check_row_height_v1(ws, new_cell_id, int(list(row_measure_dict.keys())[-1]), row_measure_dict, img_cm_size, pad_space = padding_space)
-
-                            new_cell_id = self.cell_next_anchor_img_v1(ws, row_measure_dict, max_row = int(list(row_measure_dict.keys())[-1])
-                                , cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
+                            new_cell_id, imtext_cell_id, new_max_row = \
+                            self.__cell_next_anchor_img(ws, cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
 
                             del width_cm, height_cm, img_cm_size
 
                             if get_text_cell_id == True:
-                                text_cell_id = start_col + str(int(re.findall('(\\d+)', new_cell_id)[0]) - padding_space)
-                                text_cell_id_list.append(text_cell_id)
-
-                    # set_outer_border(ws = ws, min_row = ws.max_row, max_row = new_max_row, min_col = 'A', max_col='AN'
-                    #     , col_separator = ['F', 'L', 'P', 'V', 'AB'], border_type = 'bottom')
+                                text_cell_id_list.append(imtext_cell_id)
 
             elif type(img) == dict or isinstance(img, OrderedDict):
                 if len(img) > 0:
-                    for _, imdata in img.items():
-                        img_col_char = start_col #re.findall('(\\D+)', new_cell_id)[0]
-                        img_row_num = int(re.findall('(\\d+)', new_cell_id)[0])
-
+                    for imdata in img.values():
                         if type(imdata) == str or (isinstance(imdata, np.ndarray) == True) or (isinstance(imdata, openpyxl.drawing.image.Image) == True):
                             if type(imdata) == str or (isinstance(imdata, np.ndarray) == True):
                                 img_obj = openpyxl.drawing.image.Image(imdata)
@@ -1573,26 +1554,21 @@ class XL_WorkBook():
 
                             img_cm_size = (width_cm, height_cm)
 
-                            self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth
-                                , start_col_num = xl_col_label_num(img_col_char), row_num = img_row_num)
+                            self.cell_anchor_img(ws, img_obj, new_cell_id, imwidth)
 
                             ws.add_image(img_obj)
 
-                            new_max_row = self.ws_check_row_height_v1(ws, new_cell_id, int(list(row_measure_dict.keys())[-1]), row_measure_dict, img_cm_size, pad_space = padding_space)
-
-                            new_cell_id = self.cell_next_anchor_img_v1(ws, row_measure_dict, max_row = int(list(row_measure_dict.keys())[-1])
-                                , cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
+                            new_cell_id, imtext_cell_id, new_max_row = \
+                            self.__cell_next_anchor_img(ws, cell_id = new_cell_id, img_cm_size = img_cm_size, img_spacing = padding_space)
 
                             # print(new_max_row)
+                            # print('img new_cell_id: ', new_cell_id)
 
                             del width_cm, height_cm, img_cm_size
 
                             if get_text_cell_id == True:
-                                text_cell_id = start_col + str(int(re.findall('(\\d+)', new_cell_id)[0]) - padding_space)
-                                text_cell_id_list.append(text_cell_id)
+                                text_cell_id_list.append(imtext_cell_id)
 
-                    # set_outer_border(ws = ws, min_row = ws.max_row, max_row = new_max_row, min_col = 'A', max_col='AN'
-                    #     , col_separator = ['F', 'L', 'P', 'V', 'AB'], border_type = 'bottom')
         
         if get_text_cell_id == True:
             return new_max_row, text_cell_id_list
@@ -1616,137 +1592,107 @@ class XL_WorkBook():
 
         return imwidth
 
-    def cell_check_img(self, worksheet, cell_id, imwidth, total_row = 1):
+
+    def cell_check_img(self, worksheet, cell_id, imwidth):
         img_exist_dict = {} #Image dictionary which contains anchor location (dictionary key) & imheight (dictionary value)
         # width_cm = round_float(np.divide(pixel_width, 37.795), 4) ####IMPORTANT FOMULA PIXEL --> CM.
         # height_cm = round_float(np.divide(pixel_height, 37.795), 4) ####IMPORTANT FOMULA PIXEL --> CM.
         
-        xl_imloader = SheetImageLoader(worksheet)
+        xl_imloader = SheetImageLoader(worksheet, sort_col_bool = True)
         # print(xl_imloader._images)
 
         col_char = re.findall('(\\D+)',cell_id)[0]
         row_num = int(re.findall('(\\d+)',cell_id)[0])
 
-        deletion_list = []
+        deletion_list = [] ### We will prepare the deletion list to re-anchor the existing image(s) with resizing process.
+        ### Important! Currently, no plans on re-adjusting the image anchor.
 
-        # test = []
+        for ref_cell_id, img_obj in xl_imloader._images.items():
+            ### We Calculate the arbitary dimensions of existing image(s) with respect to the column(s) width (e.g. A to F)
+            ### Important! We only do this if ref_col_char is the same as the col_char. We will only iterate on 1 column/merge column this way.
 
-        for i in range(0, total_row):
-            # exist_bool, imsize, sheet_index = xl_imloader.image_in(col_char + str(row_num + i))
-            exist_bool, imsize, ws_imobj = xl_imloader.image_in(col_char + str(row_num + i))
-            # print(exist_bool, imsize, ws_imobj)
-
-            if exist_bool == True:
-                pil_image = xl_imloader.get(col_char + str(row_num + i))
+            ref_col_char = re.findall('(\\D+)', ref_cell_id)[0]
+            if ref_col_char == col_char:
+                pil_image = xl_imloader.get(ref_cell_id)
                 # print(pil_image)
-                # deletion_list.append(worksheet._images[sheet_index]) #We Delete Existing Images, and Place it Again with Standard Resize Properties.
-                deletion_list.append(ws_imobj) #We Delete Existing Images, and Place it Again with Standard Resize Properties.
+                deletion_list.append(img_obj) #We Delete Existing Images, and Place it Again with Standard Resize Properties.
 
-                img_obj = openpyxl.drawing.image.Image(np.array(pil_image))
-                self.cell_anchor_img(worksheet, img_obj, col_char + str(row_num + i), imwidth
-                    , start_col_num = xl_col_label_num(col_char), row_num = row_num + i)
-                worksheet.add_image(img_obj)
+                new_img_obj = openpyxl.drawing.image.Image(np.array(pil_image))
+                del pil_image
 
-                # print(img_obj._data)
-                # print(type(img_obj), isinstance(img_obj, openpyxl.drawing.image.Image))
-                new_width, new_height = self.image_resize_compute(imsize[0], imsize[1], new_W = imwidth)
+                self.cell_anchor_img(worksheet, new_img_obj, ref_cell_id, imwidth)
+                worksheet.add_image(new_img_obj)
+
+                new_width, new_height = self.image_resize_compute(img_obj.width, img_obj.height, new_W = imwidth)
                 width_cm = round_float(np.divide(new_width, 37.795), 4)
                 height_cm = round_float(np.divide(new_height, 37.795), 4)
 
-                img_exist_dict[col_char + str(row_num + i)] = (width_cm, height_cm)
+                img_exist_dict[ref_cell_id] = (width_cm, height_cm)
 
-                # test.append(img_obj)
-
-                del pil_image
-
-            del imsize, ws_imobj
-
-        # print(deletion_list)
+        # print('img_exist_dict: ', img_exist_dict)
         for deletion_id in deletion_list:
             del worksheet._images[worksheet._images.index(deletion_id)]
 
-        # print(test, worksheet._images, test == worksheet._images)
         del deletion_list
         del xl_imloader
-        # print('img_exist_dict: ', img_exist_dict)
+
         return img_exist_dict
 
-    def cell_next_anchor_img_v1(self, ws, row_measure_dict, cell_id, max_row, img_exist_dict = {}, img_cm_size = None, img_spacing = 0): #calculate the location of the anchor for next image
-        new_cell_id = copy.copy(cell_id) #we 1st set the new_cell_id equal to cell_id indicating that there is NO new anchor location.
-
+    def __cell_next_anchor_img(self, ws, cell_id, img_exist_dict = {}, img_cm_size = None, img_spacing = 0): #calculate the location of the anchor for next image
         img_col_char = re.findall('(\\D+)', cell_id)[0]
+        ### We 1st initialize the new_cell_id equal to cell_id indicating that there is NO new anchor location.
+        new_cell_id = "{}{}".format(img_col_char, min(int(re.findall('(\\d+)', cell_id)[0]), 1048576))
+
+        ### We 1st initialize the final_row_id
+        final_row_id = min(int(re.findall('(\\d+)', cell_id)[0]), 1048576)
+
+        ### We 1st initialize the imtext_cell_id, imtext_cell_id is the cell_id for image text(s)/description(s). Normally, located right after the end of image anchor.
+        imtext_cell_id = "{}{}".format(img_col_char, min(int(re.findall('(\\d+)', cell_id)[0]) + 1, 1048576))
+
 
         if len(img_exist_dict) > 0:
-            end_imrow_arr = np.zeros((len(img_exist_dict)), dtype=np.uint16) #the last row where the image resides...
+            end_imrow_arr = np.zeros((len(img_exist_dict)), dtype=np.uint16) ## Array containing the ending row number for each scanned/existing image(s) in the file
+            ### We then find the max(end_imrow_arr) to determine the next ost relevant row number for new set of image(s)
             i = 0
+
             for img_cell_id, imsize in img_exist_dict.items():
                 img_row_num = int(re.findall('(\\d+)', img_cell_id)[0])
-                if img_row_num <= max_row:
-                    cusum_height = 0 #cumulative sum of current measurement in cm.
-                    row_offset = row_measure_dict[str(img_row_num-1)]
+                height_cm = imsize[1]
+                if img_row_num < 1048576: ## Maximum row number in Excel is 1048576
+                    cusum_height = 0
                     iter_index = img_row_num
+                    loop_break = False
+                    while loop_break == False:
+                        row_height, _ = self.xl_get_row_height(ws, iter_index)
+                        row_height = round_float(np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
 
-                    while cusum_height < imsize[1]:
-                        # print('Looping next anchor..')
-                        if iter_index <= max_row:
-                            cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-
-                        elif iter_index > max_row:
-                            row_height, _ = self.xl_get_row_height(ws, iter_index)
-                            row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                            cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-
-                        iter_index += 1
-                        if iter_index > 1048576:
+                        cusum_height = cusum_height + row_height
+                        if (cusum_height + self.__xl_img_cm_tolerance) >= height_cm:
+                            loop_break = True
                             break
 
-                    # print('cusum_height, iter_index: ', cusum_height, iter_index)
+                        if iter_index > 1048576:
+                            loop_break = True
+                            break
 
-                    iter_index -= 1
-                    ref_row_num = iter_index
+                        iter_index += 1
+                    
+                    del loop_break
 
-                elif img_row_num > max_row:
-                    if img_row_num < 1048576:
-                        update_start_val = max_row + 1 #to update the row_measure_dict missing values
-                        update_end_val = img_row_num + 1
-
-                        for i in range(update_start_val, update_end_val):
-                            row_height, _ = self.xl_get_row_height(ws, i)
-                            row_measure_dict[str(i)] = round_float(row_measure_dict[str(i-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-
-                        del update_start_val, update_end_val
-
-                        cusum_height = 0 #cumulative sum of current measurement in cm.
-                        row_offset = row_measure_dict[str(img_row_num-1)]
-                        iter_index = img_row_num
-
-                        while cusum_height < imsize[1]:
-                            # print('Looping next anchor..')
-                            if iter_index <= max_row:
-                                cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-
-                            elif iter_index > max_row:
-                                row_height, _ = self.xl_get_row_height(ws, iter_index)
-                                row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                                cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-
-                            iter_index += 1
-                            if iter_index > 1048576:
-                                break
-
-                        # print('cusum_height, iter_index: ', cusum_height, iter_index)
-
-                        iter_index -= 1
-                        ref_row_num = iter_index
-                    else:
-                        ref_row_num = 1048576 #if Process cannot proceed it means we have reached the final excel row.
-
-                end_imrow_arr[i] = int(ref_row_num)
+                    end_row_num = iter_index
+                else:
+                    end_row_num = 1048576
+                
+                end_imrow_arr[i] = int(end_row_num)
 
                 i += 1
 
             del new_cell_id
-            new_cell_id = img_col_char + str(max(end_imrow_arr) + 1 + img_spacing)
+            new_cell_id = "{}{}".format(img_col_char, min(max(end_imrow_arr) + 1 + img_spacing, 1048576) )
+            imtext_cell_id = "{}{}".format(img_col_char, min(max(end_imrow_arr) + 1, 1048576) )
+            final_row_id = min(max(end_imrow_arr) + img_spacing, 1048576) ### final_row_id is the final row_number with included img_spacing
+
+            # print("Checking img exist process...: ", new_cell_id, end_imrow_arr)
             del i, end_imrow_arr
 
         else:
@@ -1755,88 +1701,52 @@ class XL_WorkBook():
                 if (validate_unsign_int(img_cm_size[0]) == True or validate_unsign_float(img_cm_size[0]) == True)\
                 and (validate_unsign_int(img_cm_size[1]) == True or validate_unsign_float(img_cm_size[1]) == True):
 
-                    img_row_num = int(re.findall('(\\d+)', new_cell_id)[0])
+                    img_row_num = min(int(re.findall('(\\d+)', cell_id)[0]), 1048576)
+                    height_cm = img_cm_size[1]
 
-                    if img_row_num <= max_row:
-                        cusum_height = 0 #cumulative sum of current measurement in cm.
-                        row_offset = row_measure_dict[str(img_row_num-1)]
+                    if img_row_num < 1048576: ## Maximum row number in Excel is 1048576
+                        cusum_height = 0
                         iter_index = img_row_num
+                        loop_break = False
+                        while loop_break == False:
+                            row_height, _ = self.xl_get_row_height(ws, iter_index)
+                            row_height = round_float(np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
 
-                        # print(row_measure_dict)
-                        # print(img_cm_size[1])
-                        # print(row_offset)
-                        
-                        while cusum_height < img_cm_size[1]:
-                            # print('Looping next anchor..')
-                            if iter_index <= max_row:
-                                cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                            elif iter_index > max_row:
-                                row_height, _ = self.xl_get_row_height(ws, iter_index)
-                                row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                                cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                            iter_index += 1
-                            if iter_index > 1048576:
+                            cusum_height = cusum_height + row_height
+                            if (cusum_height + self.__xl_img_cm_tolerance) >= height_cm:
+                                loop_break = True
                                 break
 
-                        # print('cusum_height, iter_index: ', cusum_height, iter_index)
+                            if iter_index > 1048576: ## We have reached the final excel row.
+                                loop_break = True
+                                break
 
-                        iter_index -= 1
-                        ref_row_num = iter_index
-                        del new_cell_id
-                        new_cell_id = img_col_char + str(int(ref_row_num) + 1 + img_spacing)
+                            iter_index += 1
+                        
+                        del loop_break
 
-                    elif img_row_num > max_row:
-                        if img_row_num < 1048576:
-                            update_start_val = max_row + 1 #to update the row_measure_dict missing values
-                            update_end_val = img_row_num + 1
+                        end_row_num = iter_index
+                    else:
+                        end_row_num = 1048576
 
-                            for i in range(update_start_val, update_end_val):
-                                row_height, _ = self.xl_get_row_height(ws, i)
-                                row_measure_dict[str(i)] = round_float(row_measure_dict[str(i-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-
-                            del update_start_val, update_end_val
-
-                            cusum_height = 0 #cumulative sum of current measurement in cm.
-                            row_offset = row_measure_dict[str(img_row_num-1)]
-                            iter_index = img_row_num
-
-                            # print(row_measure_dict)
-                            # print(img_cm_size[1])
-                            # print(row_offset)
-
-                            while cusum_height < img_cm_size[1]:
-                                # print('Looping next anchor..')
-                                if iter_index <= max_row:
-                                    cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                                elif iter_index > max_row:
-                                    row_height, _ = self.xl_get_row_height(ws, iter_index)
-                                    row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                                    cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                                iter_index += 1
-                                if iter_index > 1048576:
-                                    break
-
-                            # print('cusum_height, iter_index: ', cusum_height, iter_index)
-
-                            iter_index -= 1
-                            ref_row_num = iter_index
-                        else:
-                            ref_row_num = 1048576 #if Process cannot proceed it means we have reached the final excel row.
-
-                        del new_cell_id
-                        new_cell_id = img_col_char + str(int(ref_row_num) + 1 + img_spacing)
+                    del new_cell_id
+                    new_cell_id = "{}{}".format(img_col_char, min(int(end_row_num) + 1 + img_spacing, 1048576) )
+                    imtext_cell_id = "{}{}".format(img_col_char, min(int(end_row_num) + 1, 1048576) )
+                    final_row_id = min(int(end_row_num) + img_spacing, 1048576) ### final_row_id is the final row_number with included img_spacing
 
                 else:
-                    raise AttributeError("If img_exist_dict is not used, please include the img_cm_size.\nimg_cm_size is a tuple containing img size in centimetres(cm)")
+                    raise AttributeError("img_cm_size is a tuple containing img size in centimetres(cm), must be a positive float or int!")
             
             else:
                 raise AttributeError("If img_exist_dict is not used, please include the img_cm_size.\nimg_cm_size is a tuple containing img size in centimetres(cm)")
 
         # print(new_cell_id)
-        return new_cell_id
+        
+
+        return new_cell_id, imtext_cell_id, final_row_id
 
 
-    def cell_anchor_img(self, ws, img_obj, cell_id, imwidth, start_col_num, row_num, col_offset = float(0.2), row_offset = float(0)):
+    def cell_anchor_img(self, ws, img_obj, cell_id, imwidth, col_offset = float(0.2), row_offset = float(0)):
         ## Before 21-1-2022: col_offset = float(0.2), row_offset = float(0.2)
         ## After 21-1-2022: col_offset = float(0.2), row_offset = float(0)
 
@@ -1859,78 +1769,130 @@ class XL_WorkBook():
         coloffset = xl_cm_to_emu(col_cm, col_offset)
         rowoffset = xl_cm_to_emu(row_cm, row_offset)
 
-        marker = AnchorMarker(col=start_col_num - 1, colOff=coloffset, row=row_num - 1, rowOff=rowoffset)
+        marker = AnchorMarker(col= xl_col_label_num(col_char) - 1, colOff=coloffset, row=row_num - 1, rowOff=rowoffset)
         # img_obj.anchor = start_col + str(int(row_num)) # where you want image to be anchored/start from
         img_obj.anchor = OneCellAnchor(_from=marker, ext=xl_imsize)
-        
 
-    def ws_check_row_height_v1(self, ws, cell_id, max_row, row_measure_dict, img_cm_size, pad_space = 0):
-        img_row_num = int(re.findall('(\\d+)', cell_id)[0])
-        final_index = None
-        # print('img_row_num, max_row: ', img_row_num, max_row)
 
-        if img_row_num <= max_row: #
-            cusum_height = 0 #cumulative sum of current measurement in cm.
-            row_offset = row_measure_dict[str(img_row_num-1)]
-            iter_index = img_row_num
+    def compute_next_anchor_img(self, ws, img_obj, cell_id, start_col, end_col = None, img_spacing = 0):
+        ### img_obj must be a openpyxl.drawing.image.Image object.
+        err_flag_arr = np.zeros((2,), dtype = bool)
+        start_col_num = end_col_num = None
 
-            while cusum_height < img_cm_size[1]:
-                # print('Check row height loop...')
-                if iter_index <= max_row:
-                    cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value 
-                elif iter_index > max_row:
-                    row_height, _ = self.xl_get_row_height(ws, iter_index)
-                    row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                    cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                iter_index += 1
-                if iter_index > 1048576:
-                    break
+        if False == type_int(start_col):
+            if type(start_col) == str:
+                start_col_num = xl_col_label_num(start_col)
 
-                # print('cusum_height, iter_index: ', cusum_height, iter_index, img_cm_size)
+                if type_int(start_col_num) == False:
+                    err_flag_arr[0] = True
+                    raise ValueError("start_col must be a string corresponding to Excel column characters from 'A' to 'XFD'")
 
-            iter_index -= 1
-            final_index = iter_index + pad_space
+                elif type_int(start_col_num) == True:
+                    if 1 <= start_col_num <= 16384:
+                        pass
+                    else:
+                        err_flag_arr[0] = True
+                        raise ValueError("start_col must be a string corresponding to Excel column characters from 'A' to 'XFD'")
 
-        else:
-            if img_row_num < 1048576:
-            # if img_row_num >= 1048576:
-                update_start_val = max_row + 1 #to update the row_measure_dict missing values
-                update_end_val = img_row_num + 1
+            else:
+                err_flag_arr[0] = True
+                raise ValueError("start_col must be an int type or str type input")
 
-                for i in range(update_start_val, update_end_val):
-                    row_height, _ = self.xl_get_row_height(ws, i)
-                    row_measure_dict[str(i)] = round_float(row_measure_dict[str(i-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
+        elif True == type_int(start_col):
+            if 1 <= start_col <= 16384:
+                start_col_num = copy.copy(start_col)
+                start_col = xl_col_label_char(start_col_num)
 
-                del update_start_val, update_end_val
+            else:
+                err_flag_arr[0] = True
+                raise ValueError("start_col must be an integer from 1 to 16384")
 
-                cusum_height = 0 #cumulative sum of current measurement in cm.
-                row_offset = row_measure_dict[str(img_row_num-1)]
+        if False == type_int(end_col):
+            if type(end_col) == str:
+                end_col_num = xl_col_label_num(end_col)
+                
+                if type_int(end_col_num) == False:
+                    err_flag_arr[1] = True
+                    raise ValueError("end_col must be a string corresponding to Excel column characters from 'A' to 'XFD'")
+
+                elif type_int(end_col_num) == True:
+                    if 1 <= end_col_num <= 16384:
+                        pass
+                    else:
+                        err_flag_arr[1] = True
+                        raise ValueError("end_col must be a string corresponding to Excel column characters from 'A' to 'XFD'")
+
+            elif end_col is None and err_flag_arr[0] == False:
+                end_col_num = start_col_num
+
+            else:
+                err_flag_arr[1] = True
+                raise ValueError("end_col must be an int type or str type input")
+
+        elif True == type_int(end_col):
+            if 1 <= end_col <= 16384:
+                end_col_num = copy.copy(end_col)
+                end_col = xl_col_label_char(end_col)
+
+            else:
+                err_flag_arr[1] = True
+                raise ValueError("end_col must be an integer from 1 to 16384")
+
+
+        if np.any(err_flag_arr) == False and type_int(start_col_num) == True and type_int(end_col_num) == True:
+            if end_col_num < start_col_num:
+                end_col = start_col
+
+            # print('start_col: ', start_col)
+            # print('end_col: ', end_col)
+
+            imwidth = self.cell_compute_imwidth(ws, start_col, end_col)
+            ### We assume that the image is nicely fit within the start_col and end_col
+
+            new_height = self.image_resize_compute(img_obj.width, img_obj.height, new_W = imwidth)[1]
+            # new_width, new_height = self.image_resize_compute(img_obj.width, img_obj.height, new_W = imwidth)
+            # width_cm = round_float(np.divide(new_width, 37.795), 4)
+            height_cm = round_float(np.divide(new_height, 37.795), 4)
+
+            img_col_char = re.findall('(\\D+)', cell_id)[0]
+            img_row_num = int(re.findall('(\\d+)', cell_id)[0])
+            if img_row_num < 1048576: ## Maximum row number in Excel is 1048576
+                cusum_height = 0
                 iter_index = img_row_num
+                loop_break = False
+                while loop_break == False:
+                    row_height, _ = self.xl_get_row_height(ws, iter_index)
+                    row_height = round_float(np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
 
-                while cusum_height < img_cm_size[1]:
-                    # print('Check row height loop...')
-                    if iter_index <= max_row:
-                        cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                    elif iter_index > max_row:
-                        row_height, _ = self.xl_get_row_height(ws, iter_index)
-                        row_measure_dict[str(iter_index)] = round_float(row_measure_dict[str(iter_index-1)] + np.multiply(row_height, self.__height_cm_xlunit_ratio), 2)
-                        cusum_height = row_measure_dict[str(iter_index)] - row_offset + 0.05 ### Add 0.05 as tolerance value
-                    iter_index += 1
-                    if iter_index > 1048576:
+                    cusum_height = cusum_height + row_height
+                    if (cusum_height + self.__xl_img_cm_tolerance) >= height_cm:
+                        loop_break = True
                         break
 
-                    # print('cusum_height, iter_index: ', cusum_height, iter_index, img_cm_size)
+                    if iter_index > 1048576:
+                        loop_break = True
+                        break
 
-                iter_index -= 1
-                final_index = iter_index + pad_space
+                    iter_index += 1
+
+                end_row_num = iter_index
             else:
-                final_index = 1048576 #if Process cannot proceed it means we have reached the final excel row.
-        
-        # print('final_index: ', final_index)
+                end_row_num = 1048576
+            
+            new_cell_id = "{}{}".format(img_col_char, min(int(end_row_num) + 1 + img_spacing, 1048576) )
+            imtext_cell_id = "{}{}".format(img_col_char, min(int(end_row_num) + 1, 1048576) )
+            final_row_id = min(int(end_row_num) + img_spacing, 1048576) ### final_row_id is the final row_number with included img_spacing
 
-        return final_index
+            return new_cell_id, imtext_cell_id, final_row_id
 
-    def cell_insert_data(self, ws, data, data_type, cell_location = None, border_bool = False, auto_fit = True
+        else:
+            raise ValueError("Please check:\\n"
+                + "1. start_col or end_col must be a string corresponding to Excel column characters from 'A' to 'XFD'"
+                + "2. If start_col or end_col are int-type, ensure the range is from 1 to 16384")
+
+
+    def cell_insert_data(self, ws, data, data_type, cell_location = None, border_bool = False
+        , auto_fit_col = True, auto_fit_row = True, auto_fit_override = (False, False)
         , font_dict = dict(name='Arial',
             size=16,
             bold=False,
@@ -1943,6 +1905,10 @@ class XL_WorkBook():
         , alignment_dict = dict(wrapText = True
             , horizontal = 'center'
             , vertical = 'center') ):
+        '''
+        cell_insert_data(): auto_fit_override[0] = override for auto_fit_col
+                            auto_fit_override[1] = override for auto_fit_row
+        '''
 
         cell_id = None
         if cell_location is not None:
@@ -1975,14 +1941,7 @@ class XL_WorkBook():
 
                 if data_type == 'image':
                     try:
-                        # data = cv2.imread(data, 1)
-                        # print(data)
                         img_obj = openpyxl.drawing.image.Image(data) #data can be a path to the img in string, or np.array img matrix
-                        # print(img_obj.image.convert('RGB'))
-                        # np_img = np.array(img_obj.image)
-                        # print('np_image: ', np_img)
-                        # cv2.imshow('Numpy', np_img)
-                        # cv2.waitKey(0)
                     except Exception:# as e:
                         # print('Exception Error: ', e)
                         data = None
@@ -1997,12 +1956,14 @@ class XL_WorkBook():
                         img_obj.anchor = cell_id # where you want image to be anchored/start from
                         ws.add_image(img_obj) # adding in the image
 
-                        if auto_fit == True:
-                            adjust_col_width = self.fit_cell_column(pixel_width = new_width) #230)
-                            adjust_row_height = self.fit_cell_row(pixel_height = new_height) #230)
-                        elif auto_fit == False:
-                            adjust_col_width = None
-                            adjust_row_height = None
+                        adjust_col_width = None
+                        adjust_row_height = None
+
+                        if auto_fit_col == True:
+                            adjust_col_width = self.fit_cell_column(pixel_width = new_width)
+                        
+                        if auto_fit_row == True:
+                            adjust_row_height = self.fit_cell_row(pixel_height = new_height)
 
                         # print(re.split('(\\d+)',cell_id)[0])
                         # print(int(re.findall('(\\d+)',cell_id)[0]))
@@ -2017,12 +1978,18 @@ class XL_WorkBook():
                             curr_height = 15
 
                         if adjust_col_width is not None:
-                            if adjust_col_width > curr_width:
+                            if auto_fit_override[0] == True:
                                 ws.column_dimensions[re.findall('(\\D+)',cell_id)[0]].width = adjust_col_width
+                            else:
+                                if adjust_col_width > curr_width:
+                                    ws.column_dimensions[re.findall('(\\D+)',cell_id)[0]].width = adjust_col_width
 
                         if adjust_row_height is not None:
-                            if adjust_row_height > curr_height:
+                            if auto_fit_override[1] == True:
                                 ws.row_dimensions[int(re.findall('(\\d+)',cell_id)[0])].height = adjust_row_height
+                            else:
+                                if adjust_row_height > curr_height:
+                                    ws.row_dimensions[int(re.findall('(\\d+)',cell_id)[0])].height = adjust_row_height
 
                         elif adjust_row_height is None:
                             if curr_height < 21:
@@ -2032,13 +1999,15 @@ class XL_WorkBook():
 
                 elif data_type == 'string':
                     ws[cell_id] = data
-                    # print(cell_id, data)
-                    if auto_fit == True:
+
+                    adjust_col_width = None
+                    adjust_row_height = None
+
+                    if auto_fit_col == True:
                         adjust_col_width = self.fit_cell_column(string = data)
+                    
+                    if auto_fit_row == True:
                         adjust_row_height = self.fit_cell_row(string = data)
-                    elif auto_fit == False:
-                        adjust_col_width = None
-                        adjust_row_height = None
 
                     # print(re.split('(\\d+)',cell_id)[0])
                     # print(int(re.findall('(\\d+)',cell_id)[0]))
@@ -2055,12 +2024,18 @@ class XL_WorkBook():
                     # print(ws.column_dimensions[re.split('(\\d+)',cell_id)[0]].width)
 
                     if adjust_col_width is not None:
-                        if adjust_col_width > curr_width:
+                        if auto_fit_override[0] == True:
                             ws.column_dimensions[re.findall('(\\D+)',cell_id)[0]].width = adjust_col_width
+                        else:
+                            if adjust_col_width > curr_width:
+                                ws.column_dimensions[re.findall('(\\D+)',cell_id)[0]].width = adjust_col_width
 
                     if adjust_row_height is not None:
-                        if adjust_row_height > curr_height:
+                        if auto_fit_override[1] == True:
                             ws.row_dimensions[int(re.findall('(\\d+)',cell_id)[0])].height = adjust_row_height
+                        else:
+                            if adjust_row_height > curr_height:
+                                ws.row_dimensions[int(re.findall('(\\d+)',cell_id)[0])].height = adjust_row_height
 
                     elif adjust_row_height is None:
                         if curr_height < 21:

@@ -14,10 +14,6 @@ import msvcrt
 
 from tool_tip import CreateToolTip
 
-from Crevis_GUI import Crevis_GUI
-from crevis_library import CrevisCamera
-from crevis_operation import Crevis_Operation
-
 from Hikvision_GUI import Hikvision_GUI
 from hikvision_operation import Hikvision_Operation
 
@@ -26,12 +22,12 @@ sys.path.append(code_PATH + '\\MVS-Python\\MvImport')
 from MvCameraControl_class import *
 
 class Camera_Connect():
-    def __init__(self, master, top_frame, scroll_canvas
+    def __init__(self, master, top_frame, scroll_canvas, tk_gui_bbox
         , tms_logo_2 = None, cam_disconnect_img = None
         , toggle_ON_button_img = None, toggle_OFF_button_img = None, img_flip_icon = None, record_start_icon = None, record_stop_icon = None
         , save_icon = None, popout_icon = None, info_icon = None, fit_to_display_icon = None, setting_icon = None, window_icon = None
         , inspect_icon= None, help_icon = None, add_icon = None, minus_icon = None
-        , close_icon = None, video_cam_icon = None, refresh_icon = None):
+        , close_icon = None, video_cam_icon = None, refresh_icon = None, folder_impil = None):
 
         self.master = master
         self.top_frame = top_frame
@@ -62,6 +58,7 @@ class Camera_Connect():
 
         self.video_cam_icon = video_cam_icon
         self.refresh_icon = refresh_icon
+        self.folder_impil = folder_impil
 
         self.cam_conn_status = False
         self.active_gui = None
@@ -77,25 +74,11 @@ class Camera_Connect():
 
         self.hikvision_devList = [] #We pass this list to the Open Device Function in Hikvision Library
         self.hikvision_list_tracer = int(0) #trace the length of devList
-        
-        self.crevis_serial_list = []
-        self.crevis_list_tracer = int(0)
 
-        ### INIT HIKVISION & CREVIS GUI classes.
+        self.tk_gui_bbox = tk_gui_bbox
+        ### INIT HIKVISION classes.
         self.mv_camera = MvCamera()
         self.obj_cam_operation = Hikvision_Operation(self.mv_camera)
-        # print(dir(self.obj_cam_operation))
-        self.crevis_pylib = CrevisCamera()
-        self.crevis_operation = Crevis_Operation(self.crevis_pylib)
-
-        self.crevis_gui = Crevis_GUI(self.scroll_canvas.window_fr, self.scroll_canvas, self.crevis_pylib, self.crevis_operation
-            , self.cam_conn_status, self
-            , self.tms_logo_2, self.cam_disconnect_img
-            , self.toggle_ON_button_img, self.toggle_OFF_button_img, self.img_flip_icon, self.record_start_icon, self.record_stop_icon, self.save_icon
-            , self.popout_icon, self.info_icon, self.fit_to_display_icon, self.setting_icon, self.window_icon
-            , inspect_icon= self.inspect_icon, help_icon = self.help_icon, add_icon = self.add_icon, minus_icon = self.minus_icon
-            , close_icon = self.close_icon
-            , bg = 'white')
 
         self.hikvision_gui = Hikvision_GUI(self.scroll_canvas.window_fr, self.scroll_canvas, self.obj_cam_operation
             , self.cam_conn_status, self
@@ -103,14 +86,10 @@ class Camera_Connect():
             , self.toggle_ON_button_img, self.toggle_OFF_button_img, self.img_flip_icon, self.record_start_icon, self.record_stop_icon, self.save_icon
             , self.popout_icon, self.info_icon, self.fit_to_display_icon, self.setting_icon, self.window_icon
             , inspect_icon= self.inspect_icon, help_icon = self.help_icon, add_icon = self.add_icon, minus_icon = self.minus_icon
-            , close_icon = self.close_icon, video_cam_icon = self.video_cam_icon, refresh_icon = self.refresh_icon
+            , close_icon = self.close_icon, video_cam_icon = self.video_cam_icon, refresh_icon = self.refresh_icon, folder_impil = self.folder_impil
             , bg = 'white')
 
-        # self.hikvision_gui.place(relx = 0, rely = 0, x=0, y=0, relwidth = 1, relheight = 1, anchor = 'nw')
-        # self.active_gui = self.hikvision_gui
         self.cam_gui_sel()
-
-        # self.crevis_gui = Crevis_GUI()
 
         self.main_frame = tk.Frame(self.scroll_canvas.window_fr, bg = 'orange') #use for auto-check camera devices only. lower() is invoked to place it behind the main GUI.
         self.main_frame.place(relx = 0, rely = 0, x=0, y=0, relwidth = 1, relheight = 1, anchor = 'nw')
@@ -123,12 +102,7 @@ class Camera_Connect():
         if self.cam_device_type_var.get() == 'Hikvision':
             self.active_gui = self.hikvision_gui
             self.hikvision_gui.place(relx = 0, rely = 0, x=0, y=0, relwidth = 1, relheight = 1, anchor = 'nw')
-            self.crevis_gui.place_forget()
-
-        elif self.cam_device_type_var.get() == 'Crevis':
-            self.active_gui = self.crevis_gui
-            self.hikvision_gui.place_forget()
-            self.crevis_gui.place(relx = 0, rely = 0, x=0, y=0, relwidth = 1, relheight = 1, anchor = 'nw')
+            self.tk_gui_bbox.bind('<Configure>', lambda e: self.hikvision_gui.gui_bbox_event(e))
 
     def cam_connect_func(self):
         if self.cam_device_type_var.get() == 'Hikvision':
@@ -136,17 +110,6 @@ class Camera_Connect():
             self.hikvision_gui.open_device(self.hikvision_devList, self.nSelCamIndex)
             self.cam_conn_status = self.hikvision_gui.cam_conn_status
             self.hikvision_gui.camera_control_state()
-            self.cam_connect_btn_state()
-            if self.cam_conn_status == True:
-                self.active_gui_str = self.cam_device_type_var.get()
-            elif self.cam_conn_status == False:
-                self.active_gui_str = None
-
-        elif self.cam_device_type_var.get() == 'Crevis':
-            self.cam_gui_sel()
-            self.crevis_gui.open_device(self.crevis_serial_list ,self.nSelCamIndex)
-            self.cam_conn_status = self.crevis_gui.cam_conn_status
-            self.crevis_gui.camera_control_state()
             self.cam_connect_btn_state()
             if self.cam_conn_status == True:
                 self.active_gui_str = self.cam_device_type_var.get()
@@ -161,30 +124,13 @@ class Camera_Connect():
             self.hikvision_gui.camera_control_state()
             self.cam_connect_btn_state()
 
-        elif self.cam_device_type_var.get() == 'Crevis':
-            self.crevis_gui.close_device()
-            self.cam_conn_status = self.crevis_gui.cam_conn_status
-            # self.crevis_gui.btn_normal_cam_mode.invoke()
-            self.crevis_gui.camera_control_state()
-            self.cam_connect_btn_state()
-            pass
-
-
     def stop_auto_toggle_parameter(self):
         if self.cam_device_type_var.get() == 'Hikvision':
             self.hikvision_gui.stop_auto_toggle_parameter()
-            
-        elif self.cam_device_type_var.get() == 'Crevis':
-            # self.crevis_gui.stop_auto_toggle_parameter()
-            pass
 
     def start_auto_toggle_parameter(self):
         if self.cam_device_type_var.get() == 'Hikvision':
             self.hikvision_gui.start_auto_toggle_parameter()
-
-        elif self.cam_device_type_var.get() == 'Crevis':
-            # self.crevis_gui.start_auto_toggle_parameter()
-            pass
 
     def record_setting_close(self):
          if self.cam_device_type_var.get() == 'Hikvision':
@@ -194,10 +140,6 @@ class Camera_Connect():
     def cam_quit_func(self):
         if self.cam_device_type_var.get() == 'Hikvision':
             self.hikvision_gui.cam_quit_func()
-
-        elif self.cam_device_type_var.get() == 'Crevis':
-            # self.crevis_gui.cam_quit_func()
-            pass
 
     #1. CAM CONNECT GUI
     def cam_connect_btn_init(self):
@@ -212,18 +154,11 @@ class Camera_Connect():
         if self.cam_conn_status == False:
             self.cam_disconn_btn.place_forget()
             self.cam_conn_btn_1['command'] = self.cam_connection_popout
-            #self.cam_conn_btn_1.place(x=550 + 200, y = 20)
             self.cam_conn_btn_1.place(relx = 0.75 , y = 20)
+
         elif self.cam_conn_status == True:
             self.cam_conn_btn_1.place_forget()
-            #print(self.cam_device_type_var.get())
             self.cam_disconn_btn['command'] = self.cam_disconnect_func
-            # if self.cam_device_type_var.get() == 'Hikvision':
-            #     self.cam_disconn_btn['command'] = self.hikvision_gui.close_device
-
-            # elif self.cam_device_type_var.get() == 'Crevis':
-            #     self.cam_disconn_btn['command'] = self.crevis_close_device
-            #self.cam_disconn_btn.place(x=550 + 200, y = 20)
             self.cam_disconn_btn.place(relx = 0.75 , y = 20)
 
     def forget_cam_connect_btn(self):
@@ -255,9 +190,6 @@ class Camera_Connect():
             self.enum_devices()
             update_interval = 200 #150
 
-        elif self.cam_device_type_var.get() == 'Crevis':
-            self.crevis_enum()
-            update_interval = 200 #100
         try:
             if self.cam_device_list.winfo_exists() == 1:
                 self.cam_device_list["value"] = self.devList
@@ -355,17 +287,6 @@ class Camera_Connect():
         self.radio_hikvision['command'] = self.cam_type_sel
         self.radio_hikvision.place(x=120,y= 210)
 
-        self.radio_crevis = tk.Radiobutton(self.cam_connection_toplvl, text='Crevis',variable = self.cam_device_type_var, value='Crevis',width=15, height=1
-            , font = 'Helvetica 10', bg = 'white', anchor = 'w', activebackground = 'white')
-        self.radio_crevis['command'] = self.cam_type_sel
-        self.radio_crevis.place(x= 120 + 155,y=210)
-
-        self.info_crevis_refresh = tk.Label(self.cam_connection_toplvl, image = self.info_icon, bg = 'white')
-        CreateToolTip(self.info_crevis_refresh, 'Please Click "REFRESH" if\nCrevis Device(s) still not shown.'
-            , -20, -45, width = 200, height = 35)
-        self.crevis_refresh_btn = tk.Button(self.cam_connection_toplvl, relief = tk.GROOVE, text='REFRESH', width = 10, height = 1, font='Helvetica 10')
-        self.crevis_refresh_btn['command'] = self.crevis_refresh_func
-        #self.crevis_refresh_btn.place(x=140, y=335)
         self.cam_type_sel()
 
     def cam_connection_popout_exit(self):
@@ -381,51 +302,16 @@ class Camera_Connect():
 
     def cam_type_sel(self):
         if self.cam_device_type_var.get() == 'Hikvision':
-            # self.label_no_of_cam.place(x=450, y=250)
-            # self.label_no_of_crevis.place_forget()
-            self.info_crevis_refresh.place_forget()
-            self.crevis_refresh_btn.place_forget()
             self.CAM_stop_checkforUpdates()
 
             self.cam_device_type_str = 'Hikvision'
             self.cam_device_list.set('')
-            # self.cam_conn_btn_2['command'] = lambda : self.hikvision_gui.open_device(self.hikvision_devList, self.nSelCamIndex)
+
             self.cam_conn_btn_2['command'] = self.cam_connect_func
             self.label_no_of_cam['text'] = 'No. of Camera(s): 0'
             self.devList *= 0
-            init_check = c_bool()
-            self.crevis_pylib.ST_IsInitSystem(init_check)
-            if init_check.value == True:
-                ret = self.crevis_pylib.ST_FreeSystem()
-                # print('Free Crevis System: ', ret)
-                # self.crevis_init_status = False
-            
-            self.CAM_device_checkForUpdates()
-
-        elif self.cam_device_type_var.get() == 'Crevis':
-            #self.label_no_of_cam.place_forget()
-            #self.label_no_of_crevis.place(x=450, y=250)
-            self.info_crevis_refresh.place(x=120 , y =335)
-            self.crevis_refresh_btn.place(x=150, y=335)
-            self.CAM_stop_checkforUpdates()
-
-            self.cam_device_type_str = 'Crevis'
-            self.cam_device_list.set('')
-            # self.cam_conn_btn_2['command'] = self.crevis_open_device
-            self.cam_conn_btn_2['command'] = self.cam_connect_func
-            #print('self.crevis_open_device')
-            self.label_no_of_cam['text'] = 'No. of Camera(s): 0'
-            self.devList *= 0
-            init_check = c_bool()
-            self.crevis_pylib.ST_IsInitSystem(init_check)
-            if init_check.value == False:
-                self.crevis_operation.Init_device()
-                ret = self.crevis_pylib.ST_InitSystem()
-                # print('Init Crevis System: ', ret)
-                # self.crevis_init_status = True
 
             self.CAM_device_checkForUpdates()
-            #self.crevis_enum()
 
     #2. HIKVISION ENUM
     def TxtWrapBy(self, start_str, end, all):
@@ -473,7 +359,6 @@ class Camera_Connect():
                 
                 # print(str_manufacturer, len(str_manufacturer))
                 if str_manufacturer == "Hikvision" or str_manufacturer == "Hikrobot": #"Hikvision" "Hikrobot"
-                #if str_manufacturer ==  "Crevis Co., LTD":
                     strModeName = ""
                     for per in mvcc_dev_info.SpecialInfo.stGigEInfo.chModelName:
                         strModeName = strModeName + chr(per)
@@ -547,68 +432,3 @@ class Camera_Connect():
         self.hikvision_list_tracer = len(self.devList)
 
         hikvision_cam_index = int(0)
-
-    #3. CREVIS ENUM
-    def crevis_refresh_func(self):
-        # print('refresh')
-        self.crevis_pylib.ST_FreeSystem()
-        self.crevis_pylib.ST_InitSystem()
-
-    def crevis_enum(self):
-        #self.crevis_devList *=0
-        if self.cam_conn_status == False:
-            self.devList *=0
-            self.crevis_serial_list *= 0
-            #self.crevis_pylib.ST_InitSystem()
-            #self.crevis_operation.Init_device()
-
-            cam_num = c_uint32(0)
-            ret = self.crevis_pylib.ST_GetAvailableCameraNum(cam_num)
-            #print(cam_num.value)
-            for i in range (cam_num.value):
-                pSize = c_uint32(256)
-                pInfo = (c_ubyte * 16)()
-                crevis_device_info = ""
-                self.crevis_pylib.ST_GetEnumDeviceInfo(i, 10001, pInfo, pSize)
-                crevis_device_info = (bytes(pInfo).decode("utf-8")).strip().strip('\x00')
-                
-
-                pSize = c_uint32(256)
-                pInfo = (c_ubyte * 16)()
-                self.crevis_pylib.ST_GetEnumDeviceInfo(i, 10002, pInfo, pSize)
-
-                self.crevis_serial_list.append((bytes(pInfo).decode("utf-8")).strip().strip('\x00'))
-
-                crevis_device_info = "["+str(i)+"] " + crevis_device_info + " " + (bytes(pInfo).decode("utf-8")).strip().strip('\x00')
-                #print(crevis_device_info, type(crevis_device_info))
-                #self.crevis_devList.append(crevis_device_info)
-                self.devList.append(crevis_device_info)
-
-            try:
-                check_bool = tk.Toplevel.winfo_exists(self.cam_connection_toplvl)
-                if check_bool == 0:
-                    pass
-                elif check_bool != 0:
-                    self.label_no_of_cam['text'] = ' '
-                    self.label_no_of_cam['text'] = 'No. of Camera(s): ' + str(len(self.devList))
-            except AttributeError:
-                pass
-
-            if len(self.devList) == 0:
-                try:
-                    self.cam_device_list.set('')
-                except (AttributeError, tk.TclError):
-                    pass
-
-            #print(self.crevis_devList)
-            #self.crevis_pylib.ST_FreeSystem()
-            #self.crevis_operation.Free_device()
-
-        else:
-            open_check = c_bool()
-            self.crevis_pylib.ST_IsOpenDevice(open_check)
-            #print('open_check.value: ',open_check.value)
-            if open_check.value == True:
-                pass
-            elif open_check.value == False:
-                self.cam_disconnect_func()

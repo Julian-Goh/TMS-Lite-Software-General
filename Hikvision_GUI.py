@@ -1,8 +1,9 @@
 ####-- LIST OF GROUP FUNCTIONS -- ####
 #1. CAMERA POPPOUT DISPLAY
-#2. PIXEL COUNT + ROI GENERATION
-#3. CAMERA DISPLAY & CONTROL GUI
-#4. CAMERA GUI FUNCTIONS (HIKVISION)
+#3. PIXEL COUNT + ROI GENERATION
+#4. CAMERA DISPLAY & CONTROL GUI
+#5. CAMERA CONNECTIONS
+#6. CAMERA GUI FUNCTIONS (HIKVISION)
 
 import os
 from os import path
@@ -43,6 +44,9 @@ from ctypes import *
 import threading
 import msvcrt
 
+from os_create_folder import open_save_folder
+import image_resize
+
 from ScrolledCanvas import ScrolledCanvas
 
 from custom_zoom_class import CanvasImage
@@ -60,19 +64,6 @@ def time_convert(sec):
     hours = mins // 60
     mins = mins % 60
     return "{:02d}:{:02d}:{:02d}".format(int(hours),int(mins), int(round(sec)) )
-
-def create_save_folder():
-    PATH = os.getcwd()
-    create_folder = PATH + r'\TMS_Saved_Images'
-    #print(create_folder)
-    print
-    if path.exists(create_folder):
-        #print ('File already exists')
-        pass
-    else:
-        os.mkdir(create_folder)
-        #print ('File created')
-    return create_folder
 
 def tk_float_verify(tk_widget, tk_var, min_val, max_val, revert_val, revert_bool = False):
     _type = None
@@ -223,18 +214,6 @@ def widget_disable(*widgets):
         except AttributeError:
             pass
 
-def display_func(display, ref_img, w, h, resize_status = True):
-    #img_resize = imutils.resize(ref_img, width = w)
-    if resize_status == True:
-        img_resize = imutils.resize(ref_img, height = h)
-        img_PIL = Image.fromarray(img_resize)
-    elif resize_status == False:
-        img_PIL = Image.fromarray(ref_img)
-
-    img_tk = ImageTk.PhotoImage(img_PIL)
-    display.create_image(w/2, h/2, image=img_tk, anchor='center', tags='img')
-    display.image = img_tk
-
 def clear_display_func(*canvas_widgets):
     for widget in canvas_widgets:
         widget.delete('all')
@@ -260,16 +239,9 @@ class Hikvision_GUI(tk.Frame):
         , toggle_ON_button_img = None, toggle_OFF_button_img = None, img_flip_icon = None, record_start_icon = None, record_stop_icon = None
         , save_icon = None, popout_icon = None, info_icon = None, fit_to_display_icon = None, setting_icon = None, window_icon = None
         , inspect_icon= None, help_icon = None, add_icon = None, minus_icon = None
-        , close_icon = None, video_cam_icon = None, refresh_icon = None, **kwargs):
+        , close_icon = None, video_cam_icon = None, refresh_icon = None, folder_impil = None, **kwargs):
 
         tk.Frame.__init__(self, master, **kwargs)
-
-        self.img_format_list = [('BMP file', '*.bmp'),
-                                ('PNG file', '*.png'),
-                                ('JPG file', '*.jpg'),
-                                ('JPEG file', '*.jpeg'),
-                                ('TIFF file', '*.tiff'),
-                                ('PDF file', '*.pdf')]
         
         self.save_img_format_list = ['.bmp', '.png', '.jpg', '.jpeg','.tiff', '.pdf']
 
@@ -309,6 +281,14 @@ class Hikvision_GUI(tk.Frame):
 
         self.video_cam_icon = video_cam_icon
         self.refresh_icon = refresh_icon
+
+        self.folder_icon = None
+        if isinstance(folder_impil, Image.Image) == True:
+            folder_impil = image_resize.pil_img_resize(folder_impil, img_width = 26, img_height = 26)
+            self.folder_icon = ImageTk.PhotoImage(folder_impil)
+
+        self.__save_dir = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images")
+        self.__save_curr_dir = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images")
 
         self.imsave_msgbox_handle = None
         self.__start_grab = False
@@ -411,6 +391,9 @@ class Hikvision_GUI(tk.Frame):
         self.popout_disp_tk_label.place(x=0, y = 30)
         self.popout_disp_tk_status.set('Popout Live Display: Inactive')
 
+        self.__display_mode = 'normal' ## Mode: 'normal', 'sq'
+        self.__gui_size_mode = 0 ##Mode: 0: default size, 1: large size
+
         self.camera_display_GUI_1()
         self.camera_display_GUI_2()
         self.camera_control_GUI()
@@ -420,14 +403,53 @@ class Hikvision_GUI(tk.Frame):
         self.record_setting_popout_gen()
         self.SQ_fr_popout_gen()
 
-        self.flip_btn_gen()
-        self.record_btn_gen()
-        self.popout_button_generate()
+        self.cam_top_widget_place()
 
         self.select_GUI_1()
 
         self.camera_control_state()
-        
+
+    def gui_bbox_event(self, event):
+        # print(event, self.__display_mode)
+        ## widget.place_info()## Retrieve all the place information of a widget (e.g. x, y, relx, rely, relwidth, relheight, etc.)
+        ## <------------------ edit-18-3-2022 (Test 2)------------------------------------>
+        if event.width < 1410:
+            mode = 0
+            if mode != self.__gui_size_mode:
+                self.__gui_size_mode = 0
+                self.gui_resize_func()
+
+        elif 1410 <= event.width:
+            mode = 1
+            if mode != self.__gui_size_mode:
+                self.__gui_size_mode = 1
+                self.gui_resize_func()
+
+    def gui_resize_func(self):
+        if self.__gui_size_mode == 0:
+            self.scroll_canvas.resize_frame(width = 950)
+            if self.__display_mode == 'normal':
+                self.cam_disp_prnt.place_forget()
+                self.cam_disp_prnt.place(x=0, y = 30+25, relwidth = 1, width = -312-10-15, relheight =1, height = -30-25-15, anchor = 'nw')
+            elif self.__display_mode == 'sq':
+                self.cam_disp_sq_prnt.place_forget()
+                self.cam_disp_sq_prnt.place(x=0, y = 30+25, relwidth = 1, width = -312-10-15
+                    , relheight =1, height = -30-25-15, anchor = 'nw')
+            self.cam_ctrl_frame.place_forget()
+            self.cam_ctrl_frame.place(x = -15, y = 30 + 25, relx = 1, rely = 0, relheight = 1, height = -(30+25)-15, anchor = 'ne')
+
+        elif self.__gui_size_mode == 1:
+            self.scroll_canvas.resize_frame(width = 1410 + 312 + 15)
+            if self.__display_mode == 'normal':
+                self.cam_disp_prnt.place_forget()
+                self.cam_disp_prnt.place(x=0, y = 30+25, width = 1400, relheight =1, height = -30-25-15, anchor = 'nw')
+            elif self.__display_mode == 'sq':
+                self.cam_disp_sq_prnt.place_forget()
+                self.cam_disp_sq_prnt.place(x=0, y = 30+25, width = 1400, relheight =1, height = -30-25-15, anchor = 'nw')
+            self.cam_ctrl_frame.place_forget()
+            self.cam_ctrl_frame.place(x = 1400 + 10, y = 30 + 25, relx = 0, rely = 0, relheight = 1, height = -(30+25)-15, relwidth = 1, width = -1400 - 10 - 15,anchor = 'nw')
+
+
     def widget_bind_focus(self, widget):
         widget.bind("<1>", lambda event: self.focus_set_func(widget))
 
@@ -444,7 +466,7 @@ class Hikvision_GUI(tk.Frame):
         active_button['bg'] = 'blue'
         active_button['font'] = 'Helvetica 10 bold'
 
-        if inactive_button1 != None:
+        if isinstance(inactive_button1, tk.Button):
             inactive_button1['disabledforeground'] = 'gray'
             inactive_button1['activeforeground'] = 'black'
             inactive_button1['fg'] = 'black'
@@ -452,33 +474,85 @@ class Hikvision_GUI(tk.Frame):
             inactive_button1['bg'] = orig_colour_bg
             inactive_button1['font'] = 'Helvetica 10'
 
-    ###############################################################################################
-    #1. CAMERA POPPOUT DISPLAY
-    def popout_button_generate(self):
+    
+    def cam_top_widget_place(self):
+        self.popout_btn_gen()
+        self.flip_btn_gen()
+        self.record_btn_gen()
+
+        x_place = lambda index: -10 - np.multiply(25+5, index)
+        ## x_place is the x-coordinates of top widget (from the right). index is the index of the widget placement based on how many existing widget(s).
+        ## E.g. Normal_cam_popout_btn is the 1st widget from the right, followed by flip_btn_1.
+
+        self.Normal_cam_popout_btn.place(x = x_place(0), y= 0, relx = 1, rely = 0, anchor = 'ne')
+        self.SQ_cam_popout_btn.place(x = x_place(0), y= 0, relx = 0.5, rely = 0, anchor = 'ne')
+        self.SQ_fr_popout_btn.place(x = x_place(0), y= 0, relx = 1, rely = 0, anchor = 'ne')
+
+        self.flip_btn_1.place(x = x_place(1), y= 2, relx = 1, rely = 0, anchor = 'ne')
+        self.flip_btn_2.place(x = x_place(1), y= 2, relx = 0.5, rely = 0, anchor = 'ne')
+
+        self.record_setting_btn.place(x = x_place(2), y= 2, relx = 1, rely = 0, anchor = 'ne')
+        self.record_btn_1.place(x = x_place(3), y= 2, relx = 1, rely = 0, anchor = 'ne')
+
+        self.time_lapse_label.place(x = x_place(4), y = 1, relx = 1, rely = 0, anchor = 'ne')
+
+    def popout_btn_gen(self):
         #print(self.popout_icon)
-        _master = self.cam_display_fr_1 #self.main_frame
+        _master = self.cam_disp_prnt #self.main_frame
         self.Normal_cam_popout_btn = tk.Button(_master, relief = tk.GROOVE, bd =0 , image = self.popout_icon, bg = 'white')
         CreateToolTip(self.Normal_cam_popout_btn, 'Camera Pop-out Display'
             , 0, -22, width = 145, height = 20)
 
         self.Normal_cam_popout_btn['command'] = self.cam_popout_open
 
-        self.SQ_cam_popout_btn = tk.Button(self.cam_display_fr_2, relief = tk.GROOVE, bd =0 , image = self.popout_icon, bg = 'white')
+        self.SQ_cam_popout_btn = tk.Button(self.cam_disp_sq_prnt, relief = tk.GROOVE, bd =0 , image = self.popout_icon, bg = 'white')
         CreateToolTip(self.SQ_cam_popout_btn, 'Camera Pop-out Display'
             , 0, -22, width = 145, height = 20)
 
         self.SQ_cam_popout_btn['command'] = self.cam_popout_open
 
-        self.SQ_fr_popout_btn = tk.Button(self.cam_display_fr_2, relief = tk.GROOVE, bd =0 , image = self.popout_icon, bg = 'white')
+        self.SQ_fr_popout_btn = tk.Button(self.cam_disp_sq_prnt, relief = tk.GROOVE, bd =0 , image = self.popout_icon, bg = 'white')
         CreateToolTip(self.SQ_fr_popout_btn, 'Frame Pop-out Display'
             , 0, -22, width = 135, height = 20)
 
         self.SQ_fr_popout_btn['command'] = self.SQ_fr_popout_open
 
-        self.Normal_cam_popout_btn.place(x = self.cam_display_width + self.cam_display_width - 20, y= 0)
-        self.SQ_cam_popout_btn.place(x = self.cam_display_width - 20, y= 0)
-        self.SQ_fr_popout_btn.place(x = self.cam_display_width + self.cam_display_width - 10, y= 0)
+    def flip_btn_gen(self):
+        _master = self.cam_disp_prnt #self.main_frame
 
+        self.flip_btn_1 = tk.Button(_master, relief = tk.GROOVE, bd =0 , image = self.img_flip_icon, bg = 'white')
+        CreateToolTip(self.flip_btn_1, 'Flip Image by 180' + chr(176)
+            , 0, -22, width = 115, height = 20)
+        self.flip_btn_1['command'] = self.flip_img_display
+
+        self.flip_btn_2 = tk.Button(self.cam_disp_sq_prnt, relief = tk.GROOVE, bd =0 , image = self.img_flip_icon, bg = 'white')
+        CreateToolTip(self.flip_btn_2, 'Flip Image by 180' + chr(176)
+            , 0, -22, width = 115, height = 20)
+        self.flip_btn_2['command'] = self.flip_img_display
+
+    def record_btn_gen(self):
+        _master = self.cam_disp_prnt #self.main_frame
+
+        self.time_lapse_var = tk.StringVar()
+        self.time_lapse_label = tk.Label(_master, textvariable = self.time_lapse_var, bg = 'white', font = 'Helvetica 11', anchor = 'e')
+        self.time_lapse_var.set('')
+
+        self.record_btn_1 = tk.Button(_master, relief = tk.GROOVE, bd =0 , bg = 'white')
+        self.record_btn_1['image'] = self.record_start_icon
+
+        CreateToolTip(self.record_btn_1, 'Record Video'
+            , 0, -22, width = 80, height = 20)
+        self.record_btn_1['command'] = self.record_start_func
+
+        self.record_setting_btn = tk.Button(_master, relief = tk.GROOVE, bd =0 , bg = 'white')
+        self.record_setting_btn['image'] = self.video_cam_icon
+
+        CreateToolTip(self.record_setting_btn, 'Video Settings'
+            , 0, -22, width = 88, height = 20)
+        self.record_setting_btn['command'] = self.record_setting_open
+
+    ###############################################################################################
+    #1. CAMERA POPPOUT DISPLAY
     def check_cam_popout_disp(self):
         if False == self.cam_popout_toplvl.check_open():
             self.popout_disp_tk_status.set('Popout Live Display: Inactive')
@@ -488,7 +562,7 @@ class Hikvision_GUI(tk.Frame):
             self.popout_disp_tk_label['bg'] = 'forest green'
 
     def cam_popout_gen(self):
-        self.cam_popout_toplvl = CustomToplvl(self.main_frame, toplvl_title = 'Camera Display', min_w = 700, min_h = 550
+        self.cam_popout_toplvl = CustomToplvl(self.main_frame, toplvl_title = 'Camera Display', min_w = 750, min_h = 600
             , icon_img = self.window_icon
             , bg = 'white'
             , topmost_bool = True
@@ -513,6 +587,7 @@ class Hikvision_GUI(tk.Frame):
             _toplvl.geometry("{}x{}+{}+{}".format(_toplvl_W, _toplvl_H, x_coordinate, y_coordinate))
             
             self.check_cam_popout_disp()
+
             self.sel_ori_btn.invoke()
             if self.__start_grab == False:
                 self.cam_popout_disp.canvas_clear(init = True)
@@ -604,7 +679,7 @@ class Hikvision_GUI(tk.Frame):
         self.graph_popout_close()
 
     def cam_popout_init(self):
-        clear_display_func(self.cam_display_rgb, self.cam_display_R, self.cam_display_G, self.cam_display_B, self.cam_disp_current_frame)
+        clear_display_func(self.cam_display_rgb, self.cam_display_R, self.cam_display_G, self.cam_display_B, self.cam_disp_sq_live)
         self.popout_ch_sel_btn_gen()
         self.popout_save_btn = tk.Button(self.cam_popout_toplvl, relief = tk.GROOVE, image = self.save_icon, borderwidth=0)
         CreateToolTip(self.popout_save_btn, 'Save Image'
@@ -675,6 +750,7 @@ class Hikvision_GUI(tk.Frame):
         self.popout_capture_img_btn['width'] = set_width - 28
         del set_width
 
+
         self.help_widget = tk.Label(self.cam_popout_toplvl, bg = 'white', image = self.help_icon)
         CreateToolTip(self.help_widget, '1. LEFT-CLICK Mouse & Drag\n   to Move Image inside Image Display.\n' +
                                         '2. RIGHT-CLICK Mouse & Drag\n   to Draw ROI Box (with ROI enabled).\n' +
@@ -738,7 +814,7 @@ class Hikvision_GUI(tk.Frame):
                 self.curr_roi_mode = self.roi_type_combobox.get()
                 self.cam_popout_disp.ROI_disable()
 
-                _enable_status = self.cam_popout_disp.ROI_box_enable(ivs_mode = 'Camera') #If Pop-out Display is Empty (No Image(s)) ROI Tool Cannot be Enabled
+                _enable_status = self.cam_popout_disp.ROI_box_enable('Camera') #If Pop-out Display is Empty (No Image(s)) ROI Tool Cannot be Enabled
 
                 if _enable_status == True:
                     if True == self.graph_popout_toplvl.check_open():
@@ -752,12 +828,13 @@ class Hikvision_GUI(tk.Frame):
                     self.roi_status_var.set(0)
                     self.roi_type_combobox['state'] = 'disable'
 
+
         elif self.roi_type_combobox.get() == self.roi_type_list[1]: #LINE
             if self.roi_type_combobox.get() != self.curr_roi_mode:
                 self.curr_roi_mode = self.roi_type_combobox.get()
                 self.cam_popout_disp.ROI_disable()
 
-                _enable_status = self.cam_popout_disp.ROI_line_enable(ivs_mode = 'Camera') #If Pop-out Display is Empty (No Image(s)) ROI Tool Cannot be Enabled
+                _enable_status = self.cam_popout_disp.ROI_line_enable('Camera') #If Pop-out Display is Empty (No Image(s)) ROI Tool Cannot be Enabled
                 
                 if _enable_status == True:
                     if True == self.graph_popout_toplvl.check_open():
@@ -779,13 +856,13 @@ class Hikvision_GUI(tk.Frame):
             self.sel_ori_btn.invoke()
 
     ###############################################################################################
-    #2. PIXEL COUNT + ROI GENERATION
+    #3. PIXEL COUNT + ROI GENERATION
     def graph_popout_gen(self):
-        self.graph_popout_toplvl = CustomToplvl(self.main_frame, toplvl_title = 'Pixel Count Graph', min_w = 700, min_h = 500
+        self.graph_popout_toplvl = CustomToplvl(self.main_frame, toplvl_title = 'Pixel Count Graph', min_w = 700, min_h = 600
             , icon_img = self.window_icon
             , bg = 'white'
             , topmost_bool = True
-            , width = 700, height = 500+50)
+            , width = 700, height = 600)
 
         self.graph_popout_toplvl.protocol("WM_DELETE_WINDOW", self.graph_popout_close)
         self.graph_display_init()
@@ -1341,7 +1418,6 @@ class Hikvision_GUI(tk.Frame):
             elif _bool_toolbar == True:
                 pass
 
-
             if pixel_info is not None and (isinstance(pixel_info, np.ndarray)) == True and pixel_info.shape[0] == 256 and pixel_info.shape[1] == 1:
                 self.ax_plt_hist_R[0].set_data(self.hist_x_index, pixel_info)
 
@@ -1403,15 +1479,27 @@ class Hikvision_GUI(tk.Frame):
                 self.hist_canvas_B.draw()
 
     ###############################################################################################
-    #3. CAMERA DISPLAY & CONTROL GUI
+    #4. CAMERA DISPLAY & CONTROL GUI
     def select_GUI_1(self):
-        self.cam_display_fr_1.place(x=0, y = 30+25)
-        self.cam_display_fr_2.place_forget()
+        # self.cam_disp_prnt.place(x=0, y = 30+25, anchor = 'nw')
+        self.__display_mode = 'normal'
+        self.gui_resize_func()
+
+        self.cam_disp_sq_prnt.place_forget()
         self.GUI_sel_btn_state(self.btn_normal_cam_mode, self.btn_SQ_cam_mode)
 
-        self.btn_save_img.place(x=20, y=30)
-        self.set_custom_save_checkbtn.place(x=20, y = 60)
-        self.trigger_auto_save_checkbtn.place(x=20, y = 60 + 25)
+        # self.btn_save_img.place(x=20, y=30)
+        self.btn_save_img.place(x = -125, relx = 0.5
+            , y = 30, rely = 0
+            , anchor = 'nw')
+        # self.set_custom_save_checkbtn.place(x=20, y = 60)
+        self.set_custom_save_checkbtn.place(x = -130, relx = 0.5
+            , y = 60, rely = 0
+            , anchor = 'nw')
+        # self.trigger_auto_save_checkbtn.place(x=20, y = 60 + 25)
+        self.trigger_auto_save_checkbtn.place(x = -130, relx = 0.5
+            , y = 85, rely = 0
+            , anchor = 'nw')
 
         self.SQ_auto_save_checkbtn.place_forget()
 
@@ -1420,16 +1508,24 @@ class Hikvision_GUI(tk.Frame):
         self.check_cam_popout_disp()
 
     def select_GUI_2(self):
-        self.cam_display_fr_2.place(x=0, y=30+25)
-        self.cam_display_fr_1.place_forget()
+        self.__display_mode = 'sq'
+        # self.cam_disp_sq_prnt.place(x=0, y=30+25)
+        self.gui_resize_func()
+        self.cam_disp_prnt.place_forget()
         self.GUI_sel_btn_state(self.btn_SQ_cam_mode, self.btn_normal_cam_mode)
 
         self.btn_save_img.place_forget()
         self.set_custom_save_checkbtn.place_forget()
         self.trigger_auto_save_checkbtn.place_forget()
-        self.SQ_auto_save_checkbtn.place(x=20, y = 60)
+        # self.SQ_auto_save_checkbtn.place(x=20, y = 60)
+        self.SQ_auto_save_checkbtn.place(x = -130, relx = 0.5
+            , y = 85, rely = 0
+            , anchor = 'nw')
 
-        self.btn_save_sq.place(x=20, y=30)
+        # self.btn_save_sq.place(x=20, y=30)
+        self.btn_save_sq.place(x = -125, relx = 0.5
+            , y = 30, rely = 0
+            , anchor = 'nw')
 
         self.check_cam_popout_disp()
 
@@ -1440,50 +1536,6 @@ class Hikvision_GUI(tk.Frame):
             self.flip_img_bool = False
 
         #print(self.flip_img_bool)
-
-    def flip_btn_gen(self):
-        _master = self.cam_display_fr_1 #self.main_frame
-
-        self.flip_btn_1 = tk.Button(_master, relief = tk.GROOVE, bd =0 , image = self.img_flip_icon, bg = 'white')
-        #self.flip_btn_1.place(x = self.cam_display_width + self.cam_display_width - 50, y= 25)
-        CreateToolTip(self.flip_btn_1, 'Flip Image by 180' + chr(176)
-            , 0, -22, width = 115, height = 20)
-        self.flip_btn_1['command'] = self.flip_img_display
-
-        self.flip_btn_2 = tk.Button(self.cam_display_fr_2, relief = tk.GROOVE, bd =0 , image = self.img_flip_icon, bg = 'white')
-        CreateToolTip(self.flip_btn_2, 'Flip Image by 180' + chr(176)
-            , 0, -22, width = 115, height = 20)
-        #self.flip_btn_2.place(x = self.cam_display_width - 20, y= 0)
-        self.flip_btn_2['command'] = self.flip_img_display
-
-        self.flip_btn_1.place(x = self.cam_display_width + self.cam_display_width - 50, y= 0+2)
-        self.flip_btn_2.place(x = self.cam_display_width - 50, y= 0)
-
-    def record_btn_gen(self):
-        _master = self.cam_display_fr_1 #self.main_frame
-
-        self.time_lapse_var = tk.StringVar()
-        self.time_lapse_label = tk.Label(_master, textvariable = self.time_lapse_var, bg = 'white', font = 'Helvetica 11', anchor = 'e')
-        self.time_lapse_var.set('')
-        # self.time_lapse_label.place(x= self.cam_display_width + self.cam_display_width - 85, y= 0+2, anchor = 'ne')
-
-        self.record_btn_1 = tk.Button(_master, relief = tk.GROOVE, bd =0 , bg = 'white')
-        self.record_btn_1['image'] = self.record_start_icon
-
-        CreateToolTip(self.record_btn_1, 'Record Video'
-            , 0, -22, width = 80, height = 20)
-        self.record_btn_1['command'] = self.record_start_func
-
-        self.record_btn_1.place(x = self.cam_display_width + self.cam_display_width - 120, y= 0+2)
-
-
-        self.record_setting_btn = tk.Button(_master, relief = tk.GROOVE, bd =0 , bg = 'white')
-        self.record_setting_btn['image'] = self.video_cam_icon
-
-        CreateToolTip(self.record_setting_btn, 'Video Settings'
-            , 0, -22, width = 88, height = 20)
-        self.record_setting_btn['command'] = self.record_setting_open
-        self.record_setting_btn.place(x = self.cam_display_width + self.cam_display_width - 90, y= 0)
 
     def record_msg_box(self):
         if self.cam_conn_status == True:
@@ -1519,7 +1571,7 @@ class Hikvision_GUI(tk.Frame):
             self.obj_cam_operation.record_warning_flag = False
 
     def record_setting_popout_gen(self):
-        self.record_setting_toplvl = CustomToplvl(self.cam_display_fr_1, toplvl_title = 'Video Control Settings', min_w = 300, min_h = 185
+        self.record_setting_toplvl = CustomToplvl(self.cam_disp_prnt, toplvl_title = 'Video Control Settings', min_w = 300, min_h = 185
             , icon_img = self.window_icon
             , bg = 'white'
             , topmost_bool = False
@@ -1807,49 +1859,68 @@ class Hikvision_GUI(tk.Frame):
     def cam_display_place_GUI_1(self):
         # print(self.obj_cam_operation.Pixel_Format_Mono(self.pixel_format_combobox.get()), self.obj_cam_operation.Pixel_Format_Color(self.pixel_format_combobox.get()))
         if True == self.obj_cam_operation.Pixel_Format_Mono(self.pixel_format_combobox.get()):
-            self.ori_disp_label.place(x = 0, y = 0+30)
+            # self.ori_disp_label.place(x = 0, y = 0+30)
+            self.ori_disp_label.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
             self.R_disp_label.place_forget()
             self.G_disp_label.place_forget()
             self.B_disp_label.place_forget()
 
-            self.cam_display_rgb['width'] = self.cam_display_width + self.cam_display_width + 10
-            self.cam_display_rgb['height'] = self.cam_display_height + self.cam_display_height + 50
-            self.cam_display_rgb.place(x = 0, y = 0+25+30)
+            self.cam_display_rgb.place(x = 0, y = 25, relx = 0, rely = 0, relwidth = 1, relheight = 1, height = -25, anchor = 'nw')
             self.cam_display_R.place_forget()
             self.cam_display_G.place_forget()
             self.cam_display_B.place_forget()
 
         elif True == self.obj_cam_operation.Pixel_Format_Color(self.pixel_format_combobox.get()):
-            self.ori_disp_label.place(x = 0, y = 0+30)
-            self.R_disp_label.place(x = self.cam_display_width + 5, y = 0+30)
-            self.G_disp_label.place(x = 0, y = self.cam_display_height+25+30)
-            self.B_disp_label.place(x = self.cam_display_width + 5, y = self.cam_display_height+25+30)
+            self.ori_disp_label.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
+            self.R_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0, anchor = 'nw')
+            self.G_disp_label.place(x = 0, y = 0, relx = 0, rely = 0.5, anchor = 'nw')
+            self.B_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0.5, anchor = 'nw')
 
-            self.cam_display_rgb['width'] = self.cam_display_width
-            self.cam_display_rgb['height'] = self.cam_display_height
-            self.cam_display_rgb.place(x = 0, y = 0+25+30)
-            self.cam_display_R.place(x = self.cam_display_width + 5, y = 0+25+30)
-            self.cam_display_G.place(x = 0, y = self.cam_display_height+50+30)
-            self.cam_display_B.place(x = self.cam_display_width + 5, y = self.cam_display_height+50+30)
+            self.cam_display_rgb.place(x = 0, y = 25, relx = 0, rely = 0
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_R.place(x = 2, y = 25, relx = 0.5, rely = 0
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_G.place(x = 0, y = 25, relx = 0, rely = 0.5
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_B.place(x = 2, y = 25, relx = 0.5, rely = 0.5
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
 
         else:
-            self.ori_disp_label.place(x = 0, y = 0+30)
-            self.R_disp_label.place(x = self.cam_display_width + 5, y = 0+30)
-            self.G_disp_label.place(x = 0, y = self.cam_display_height+25+30)
-            self.B_disp_label.place(x = self.cam_display_width + 5, y = self.cam_display_height+25+30)
+            self.ori_disp_label.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
+            self.R_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0, anchor = 'nw')
+            self.G_disp_label.place(x = 0, y = 0, relx = 0, rely = 0.5, anchor = 'nw')
+            self.B_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0.5, anchor = 'nw')
 
-            self.cam_display_rgb['width'] = self.cam_display_width
-            self.cam_display_rgb['height'] = self.cam_display_height
-            self.cam_display_rgb.place(x = 0, y = 0+25+30)
-            self.cam_display_R.place(x = self.cam_display_width + 5, y = 0+25+30)
-            self.cam_display_G.place(x = 0, y = self.cam_display_height+50+30)
-            self.cam_display_B.place(x = self.cam_display_width + 5, y = self.cam_display_height+50+30)
+            self.cam_display_rgb.place(x = 0, y = 25, relx = 0, rely = 0
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_R.place(x = 2, y = 25, relx = 0.5, rely = 0
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_G.place(x = 0, y = 25, relx = 0, rely = 0.5
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
+            self.cam_display_B.place(x = 2, y = 25, relx = 0.5, rely = 0.5
+                , relwidth = 0.5, width = -2
+                , relheight = 0.5, height = -25
+                , anchor = 'nw')
 
     def cam_display_forget_GUI_1(self):
-        self.ori_disp_label.place(x = 0, y = 0+30)
-        self.R_disp_label.place(x = self.cam_display_width + 5, y = 0+30)
-        self.G_disp_label.place(x = 0, y = self.cam_display_height+25+30)
-        self.B_disp_label.place(x = self.cam_display_width + 5, y = self.cam_display_height+25+30)
+        self.ori_disp_label.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
+        self.R_disp_label.place(x = 5, y = 0, relx = 0.5, rely = 0, anchor = 'nw')
+        self.G_disp_label.place(x = 0, y = 0, relx = 0, rely = 0.5, anchor = 'nw')
+        self.B_disp_label.place(x = 5, y = 0, relx = 0.5, rely = 0.5, anchor = 'nw')
 
         self.cam_display_rgb.place_forget()
         self.cam_display_R.place_forget()
@@ -1857,40 +1928,60 @@ class Hikvision_GUI(tk.Frame):
         self.cam_display_B.place_forget()
 
     def camera_display_GUI_1(self):
-        self.cam_display_fr_1 = tk.Frame(self.main_frame, width = self.cam_display_width + self.cam_display_width + 10
-            , height = self.cam_display_height + self.cam_display_height + 50 + 30, bg= 'white')
+        self.cam_disp_prnt = tk.Frame(self.main_frame)
+        self.cam_disp_prnt['bg'] = 'white'
 
-        self.ori_disp_label = tk.Label(self.cam_display_fr_1, text = 'Original Image', font = 'Helvetica 12 bold', bg = 'snow3', fg = 'black')
+        self.cam_disp_subprnt = tk.Frame(self.cam_disp_prnt)
+        self.cam_disp_subprnt['bg'] = 'white'
+        self.cam_disp_subprnt.place(x=0, y=30, relwidth = 1, relheight = 1, height = -30, anchor = 'nw')
+        sub_parent = self.cam_disp_subprnt
 
-        self.R_disp_label = tk.Label(self.cam_display_fr_1, text = 'Red Channel', font = 'Helvetica 12 bold', bg = 'red', fg = 'white')
+        self.ori_disp_label = tk.Label(sub_parent, text = 'Original Image', font = 'Helvetica 12 bold', bg = 'snow3', fg = 'black')
 
-        self.G_disp_label = tk.Label(self.cam_display_fr_1, text = 'Green Channel', font = 'Helvetica 12 bold', bg = 'green', fg = 'white')
+        self.R_disp_label = tk.Label(sub_parent, text = 'Red Channel', font = 'Helvetica 12 bold', bg = 'red', fg = 'white')
 
-        self.B_disp_label = tk.Label(self.cam_display_fr_1, text = 'Blue Channel', font = 'Helvetica 12 bold', bg = 'blue', fg = 'white')
+        self.G_disp_label = tk.Label(sub_parent, text = 'Green Channel', font = 'Helvetica 12 bold', bg = 'green', fg = 'white')
 
-        self.ori_disp_label.place(x = 0, y = 0+30)
-        self.R_disp_label.place(x = self.cam_display_width + 5, y = 0+30)
-        self.G_disp_label.place(x = 0, y = self.cam_display_height+25+30)
-        self.B_disp_label.place(x = self.cam_display_width + 5, y = self.cam_display_height+25+30)
+        self.B_disp_label = tk.Label(sub_parent, text = 'Blue Channel', font = 'Helvetica 12 bold', bg = 'blue', fg = 'white')
 
-        self.dummy_canvas_rgb = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
-        self.dummy_canvas_R = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'red', highlightthickness = 0)
-        self.dummy_canvas_G = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'green', highlightthickness = 0)
-        self.dummy_canvas_B = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'blue', highlightthickness = 0)
+        self.ori_disp_label.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
+        self.R_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0, anchor = 'nw')
+        self.G_disp_label.place(x = 0, y = 0, relx = 0, rely = 0.5, anchor = 'nw')
+        self.B_disp_label.place(x = 2, y = 0, relx = 0.5, rely = 0.5, anchor = 'nw')
 
-        self.cam_display_rgb = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
-        self.cam_display_R = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'red', highlightthickness = 0)
-        self.cam_display_G = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'green', highlightthickness = 0)
-        self.cam_display_B = tk.Canvas(self.cam_display_fr_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'blue', highlightthickness = 0)
+        self.dummy_canvas_rgb = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
+        self.dummy_canvas_R = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'red', highlightthickness = 0)
+        self.dummy_canvas_G = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'green', highlightthickness = 0)
+        self.dummy_canvas_B = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'blue', highlightthickness = 0)
 
-        self.camera_no_display_func()
+        self.cam_display_rgb = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
+        self.cam_display_R = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'red', highlightthickness = 0)
+        self.cam_display_G = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'green', highlightthickness = 0)
+        self.cam_display_B = tk.Canvas(sub_parent, width = self.cam_display_width, height = self.cam_display_height, bg = 'blue', highlightthickness = 0)
 
-        self.dummy_canvas_rgb.place(x = 0, y = 0+25+30)
-        self.dummy_canvas_R.place(x = self.cam_display_width + 5, y = 0+25+30)
-        self.dummy_canvas_G.place(x = 0, y = self.cam_display_height+50+30)
-        self.dummy_canvas_B.place(x = self.cam_display_width + 5, y = self.cam_display_height+50+30)
+        self.dummy_canvas_rgb.bind('<Configure>', lambda e: self.camera_disconnect_disp(event = e, tk_canvas = self.dummy_canvas_rgb))
+        self.dummy_canvas_R.bind('<Configure>', lambda e: self.camera_disconnect_disp(event = e, tk_canvas = self.dummy_canvas_R))
+        self.dummy_canvas_G.bind('<Configure>', lambda e: self.camera_disconnect_disp(event = e, tk_canvas = self.dummy_canvas_G))
+        self.dummy_canvas_B.bind('<Configure>', lambda e: self.camera_disconnect_disp(event = e, tk_canvas = self.dummy_canvas_B))
 
-    def gen_camera_disp_canvas(self, master, label_text, label_bg, label_fg,
+        self.dummy_canvas_rgb.place(x = 0, y = 25, relx = 0, rely = 0
+            , relwidth = 0.5, width = -2
+            , relheight = 0.5, height = -25
+            , anchor = 'nw')
+        self.dummy_canvas_R.place(x = 2, y = 25, relx = 0.5, rely = 0
+            , relwidth = 0.5, width = -2
+            , relheight = 0.5, height = -25
+            , anchor = 'nw')
+        self.dummy_canvas_G.place(x = 0, y = 25, relx = 0, rely = 0.5
+            , relwidth = 0.5, width = -2
+            , relheight = 0.5, height = -25
+            , anchor = 'nw')
+        self.dummy_canvas_B.place(x = 2, y = 25, relx = 0.5, rely = 0.5
+            , relwidth = 0.5, width = -2
+            , relheight = 0.5, height = -25
+            , anchor = 'nw')
+
+    def gen_cam_sq_disp_canvas(self, master, label_text, label_bg, label_fg,
         canvas_width, canvas_height, canvas_bg, ordinal_index):
         #First widget placement, ordinal index = 0!!
         label_x = 0
@@ -1900,19 +1991,24 @@ class Hikvision_GUI(tk.Frame):
         canvas_y = 0 + 25 + np.multiply((canvas_height + 25+5), ordinal_index)
 
         label_widget = tk.Label(master, text = label_text, font = 'Helvetica 12 bold', bg = label_bg, fg = label_fg)
-        label_widget.place(x=label_x, y=label_y)
+        # label_widget.place(x=label_x, y=label_y)
 
         canvas_widget = tk.Canvas(master, width = canvas_width, height = canvas_height, bg = canvas_bg, highlightthickness = 0)
-        canvas_widget.place(x=canvas_x, y=canvas_y)
+        # canvas_widget.place(x=canvas_x, y=canvas_y)
 
-        return canvas_widget
+        label_widget.place(x=label_x, y = label_y)
+        canvas_widget.place(x=canvas_x, y=canvas_y, relwidth = 1)
+
+        return label_widget, canvas_widget
 
     def custom_scroll_inner_bound(self, event, disp_scroll_class):
         # print(event.type)
         # print(dir(event))
-        disp_scroll_class.canvas.bind_all("<MouseWheel>", lambda event: self.custom_inner_scrolly(event, disp_scroll_class))
+        # disp_scroll_class.canvas.bind_all("<MouseWheel>", lambda event: self.custom_inner_scrolly(event, disp_scroll_class))
+        disp_scroll_class.canvas.bind_all("<MouseWheel>", partial(self.custom_inner_scrolly, disp_scroll_class = disp_scroll_class))
 
     def custom_inner_scrolly(self, event, disp_scroll_class):
+        # print(event)
         if disp_scroll_class.scrolly_lock == False:
             y0_inner = float(disp_scroll_class.canvas.yview()[0])
             y1_inner = float(disp_scroll_class.canvas.yview()[1])
@@ -1929,39 +2025,84 @@ class Hikvision_GUI(tk.Frame):
                     if event.delta < 0: #scroll down
                         self.scroll_canvas.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
+    def custom_mouse_enter_SQ_disp(self, event, disp_scroll_class, scroll_hbar = True):
+        if scroll_hbar == True:
+            disp_scroll_class.rmb_all_func(scroll_x = False, scroll_y = True)
+
+        disp_scroll_class.canvas.bind('<Enter>', lambda e: None)
+        disp_scroll_class.canvas.bind('<Leave>', lambda e: None)
+        self.custom_scroll_inner_bound(event, disp_scroll_class)
+
+    def custom_mouse_leave_SQ_disp(self, event, disp_scroll_class, scroll_hbar = False):
+        if scroll_hbar == False:
+            disp_scroll_class.rmb_all_func(scroll_x = False, scroll_y = False)
+
+        self.scroll_canvas._bound_to_mousewheel(event)
+
     def camera_display_GUI_2(self):
+        # self.cam_disp_sq_prnt = tk.Frame(self.main_frame, width = self.cam_display_width + self.cam_display_width + 10
+        #     , height = self.cam_display_height + self.cam_display_height + 50, bg= 'white')
+        self.cam_disp_sq_prnt = tk.Frame(self.main_frame)
+        self.cam_disp_sq_prnt['bg'] = 'white'
 
-        self.cam_display_fr_2 = tk.Frame(self.main_frame, width = self.cam_display_width + self.cam_display_width + 10
-            , height = self.cam_display_height + self.cam_display_height + 50, bg= 'white')
+        self.cam_disp_sq_subprnt_1 = tk.Frame(self.cam_disp_sq_prnt)
+        self.cam_disp_sq_subprnt_1['bg'] = 'white'
+        self.cam_disp_sq_subprnt_1.place(x = 0, y = 25, relx = 0, rely = 0, relwidth = 0.5, width = -2, relheight = 1, height = -25, anchor = 'nw')
 
-        self.SQ_frame_scroll_display = ScrolledCanvas(master = self.cam_display_fr_2, frame_w = self.cam_display_width, frame_h = 2800 + 1700, 
-            canvas_x = self.cam_display_width + 10, canvas_y = 0 + 25, window_bg = 'white', canvas_highlightthickness = 0)
+        self.cam_disp_sq_subprnt_2 = tk.Frame(self.cam_disp_sq_prnt)
+        self.cam_disp_sq_subprnt_2['bg'] = 'white'
+        self.cam_disp_sq_subprnt_2.place(x = 2, y = 25, relx = 0.5, rely = 0, relwidth = 0.5, width = -2, relheight = 1, height = -25, anchor = 'nw')
 
-        self.SQ_frame_scroll_display.rmb_all_func() #To Place the Scroll Canvas
+        self.cam_disp_sq_subprnt_2.bind('<Configure>', self.cam_sq_disp_resize)
 
-        #CUSTOM MOUSEWHEEL FUNCTION for self.SQ_frame_scroll_display
-        self.SQ_frame_scroll_display.scrollx.place_forget()
-        self.SQ_frame_scroll_display.scrolly.place_forget()
+        self.SQ_frame_scroll_display = ScrolledCanvas(master = self.cam_disp_sq_subprnt_2, frame_w = self.cam_display_width, frame_h = 2800 + 1700, 
+            canvas_x = 0, canvas_y = 0, window_bg = 'white', canvas_highlightthickness = 0)
 
-        self.SQ_frame_scroll_display.canvas.bind('<Enter>', lambda event: self.custom_scroll_inner_bound(event, self.SQ_frame_scroll_display))
-        self.SQ_frame_scroll_display.canvas.bind('<Leave>', self.scroll_canvas._bound_to_mousewheel)
+        self.SQ_frame_scroll_display.rmb_all_func(scroll_x = False, scroll_y = False) #To Place the Scroll Canvas
 
-        self.dummy_canvas_current_frame = tk.Canvas(self.cam_display_fr_2, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
-        self.dummy_canvas_current_frame.place(x = 0, y = 0+25)
+        # self.SQ_frame_scroll_display.canvas.bind('<Enter>', lambda event: self.custom_scroll_inner_bound(event, self.SQ_frame_scroll_display))
+        # self.SQ_frame_scroll_display.canvas.bind('<Leave>', self.scroll_canvas._bound_to_mousewheel)
 
-        self.cam_disp_current_frame = self.gen_camera_disp_canvas(self.cam_display_fr_2, 'Live Frame', 'snow3', 'black',
-            self.cam_display_width, self.cam_display_height, 'snow3', 0) #'Current Frame'
+        self.cam_disp_sq_subprnt_2.bind('<Enter>', lambda event: self.custom_mouse_enter_SQ_disp(event, self.SQ_frame_scroll_display, scroll_hbar = True))
+        self.cam_disp_sq_subprnt_2.bind('<Leave>', lambda event: self.custom_mouse_leave_SQ_disp(event, self.SQ_frame_scroll_display, scroll_hbar = False))
 
+        self.dummy_canvas_sq_live = tk.Canvas(self.cam_disp_sq_subprnt_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
+        self.dummy_canvas_sq_live.place(x = 0, y = 25, relx = 0, rely = 0, relwidth = 1, relheight = 0.5, height = -25, anchor = 'nw')
+
+        self.cam_lb_sq_live = tk.Label(self.cam_disp_sq_subprnt_1, text = 'Live Frame', font = 'Helvetica 12 bold', bg = 'snow3', fg = 'black')
+        self.cam_disp_sq_live = tk.Canvas(self.cam_disp_sq_subprnt_1, width = self.cam_display_width, height = self.cam_display_height, bg = 'snow3', highlightthickness = 0)
+        self.cam_lb_sq_live.place(x = 0, y = 0, relx = 0, rely = 0, anchor = 'nw')
+        self.cam_disp_sq_live.place(x = 0, y = 25, relx = 0, rely = 0, relwidth = 1, relheight = 0.5, height = -25, anchor = 'nw')
+
+        self.tk_cam_sq_widget_list = []
         for i in range(0, 16):
             lb_name = 'Frame ' + str(i)
             parent = self.SQ_frame_scroll_display.window_fr
             lb_bg = canvas_bg = 'snow3'
             lb_fg = 'black'
 
-            tk_disp = self.gen_camera_disp_canvas(parent, lb_name, lb_bg, lb_fg,
+            tk_lb, tk_disp = self.gen_cam_sq_disp_canvas(parent, lb_name, lb_bg, lb_fg,
                 self.cam_display_width, self.cam_display_height, canvas_bg, int(i))
 
             self.tk_sq_disp_list.append(tk_disp)
+            self.tk_cam_sq_widget_list.append((tk_lb, tk_disp))
+
+    def cam_sq_disp_resize(self, event):
+        resize_h = (event.height * 0.5) - 25
+        for ordinal_index, widgets in enumerate(self.tk_cam_sq_widget_list):
+            label_x = 0
+            label_y = 0 + np.multiply((resize_h + 25 + 5), ordinal_index)
+
+            canvas_x = 0
+            canvas_y = 0 + 25 + np.multiply((resize_h + 25 + 5), ordinal_index)
+            
+            widgets[1]['height'] = resize_h
+
+            widgets[0].place(x=label_x, y = label_y)
+            widgets[1].place(x=canvas_x, y=canvas_y, relwidth = 1)
+
+        self.SQ_frame_scroll_display.resize_frame(height = canvas_y + resize_h)
+
     
     def SQ_fr_popout_gen(self):
         self.SQ_fr_popout_toplvl = CustomToplvl(self.main_frame, toplvl_title = 'SQ Frame Display', min_w = 700, min_h = 500
@@ -2120,57 +2261,105 @@ class Hikvision_GUI(tk.Frame):
         else:
             return False
 
+    
+    def cam_ctrl_frame_resize(self, event, default_h):
+        if event.height > default_h:
+            cam_ctrl_fr_H = 0
+            h_per_frame = int(np.divide(event.height - default_h, 3))
+
+            self.cam_frame_1['height'] = 150 + h_per_frame
+            self.cam_frame_2['height'] = 90 + 30 + h_per_frame
+            self.cam_frame_3['height'] = 348 + 100 + 70 + h_per_frame
+
+            self.cam_frame_1.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_1.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_1.winfo_height()
+
+            self.cam_frame_2.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_2.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_2.winfo_height()
+
+            self.cam_frame_3.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_3.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_3.winfo_height()
+
+        else:
+            cam_ctrl_fr_H = 0
+            self.cam_frame_1['height'] = 150
+            self.cam_frame_2['height'] = 90 + 30
+            self.cam_frame_3['height'] = 348 + 100 + 70
+
+            self.cam_frame_1.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_1.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_1.winfo_height()
+
+            self.cam_frame_2.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_2.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_2.winfo_height()
+
+            self.cam_frame_3.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+            self.cam_frame_3.update_idletasks()
+            cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_3.winfo_height()
+
+
     def camera_control_GUI(self):
         bg_color = 'SteelBlue1' #'DarkSlateGray2'
         cam_ctrl_fr_H = 0
 
         self.cam_ctrl_frame = tk.Frame(self.main_frame, bg = bg_color, highlightbackground = 'navy', highlightthickness=1)
         self.cam_ctrl_frame['width'] = 312
-        self.cam_ctrl_frame.place(x = 615, y =0)
+        self.cam_ctrl_frame.place(x = -15, y = 30 + 25, relx = 1, rely = 0, relheight = 1, height = -(30+25)-15, anchor = 'ne') ## During init-phase, the cam_ctrl_frame place value(s) are set this way.
 
-        self.cam_frame_1 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)#, bg= 'cyan')
-        self.cam_frame_1['width'] = 300
+        ### self.cam_frame_1: Frame_1 is the Main Camera Controls
+        self.cam_frame_1 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)
         self.cam_frame_1['height'] = 150
-        #self.cam_frame_1: Frame_1 is the Main Camera Controls
-        self.cam_frame_1.place(x = 5, y = cam_ctrl_fr_H + 5)
-        self.cam_frame_1.update_idletasks()
+        
+        ### self.cam_frame_2: Frame_2 is the Save Camera Controls
+        self.cam_frame_2 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)
+        self.cam_frame_2['height'] = 90 + 30
 
+        ### self.cam_frame_3: Frame_3 is the Exposure etc Camera Controls
+        self.cam_frame_3 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)
+        self.cam_frame_3['height'] = 348 + 100 + 70
+
+
+        self.cam_frame_1.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
+        self.cam_frame_1.update_idletasks()
         cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_1.winfo_height()
 
-        self.cam_frame_2 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)#, bg= 'orange')
-        self.cam_frame_2['width'] = 300
-        self.cam_frame_2['height'] = 90 + 30
-        #self.cam_frame_2: Frame_2 is the Save Camera Controls
-        self.cam_frame_2.place(x = 5, y = cam_ctrl_fr_H + 5)
+        self.cam_frame_2.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
         self.cam_frame_2.update_idletasks()
-
         cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_2.winfo_height()
 
-        self.cam_frame_3 = tk.Frame(self.cam_ctrl_frame, highlightthickness=0)#, bg= 'green')
-        self.cam_frame_3['width'] = 300
-        self.cam_frame_3['height'] = 348 + 100 + 70
-        #self.cam_frame_3: Frame_3 is the Exposure etc Camera Controls
-        self.cam_frame_3.place(x = 5, y = cam_ctrl_fr_H + 5)
+        self.cam_frame_3.place(x = 5, y = cam_ctrl_fr_H + 5, relx = 0, rely = 0, relwidth = 1, width = -10, anchor = 'nw')
         self.cam_frame_3.update_idletasks()
-
         cam_ctrl_fr_H = cam_ctrl_fr_H + 5 + self.cam_frame_3.winfo_height()
 
         self.cam_ctrl_frame['height'] = cam_ctrl_fr_H + 7
 
         if isinstance(self.scroll_canvas, ScrolledCanvas) == True:
-            if self.scroll_canvas.get_frame_size()[1] < cam_ctrl_fr_H + 7 + 15:
-                self.scroll_canvas.resize_frame(height = cam_ctrl_fr_H + 7 + 15)
+            if self.scroll_canvas.get_frame_size()[1] < self.cam_ctrl_frame['height'] + self.cam_ctrl_frame.winfo_y() + 15:
+                self.scroll_canvas.resize_frame(height = self.cam_ctrl_frame['height'] + self.cam_ctrl_frame.winfo_y() + 15)
+
+        self.cam_ctrl_frame.bind('<Configure>', partial(self.cam_ctrl_frame_resize, default_h = self.cam_ctrl_frame['height']))
         ###################################################################################################################################################
 
         self.cam_mode_var = tk.StringVar(value = self.cam_mode_str)
         
-        tk.Label(self.cam_frame_1, text = 'Trigger Source: ', font = 'Helvetica 10').place(x = 5 , y = 100)
+        # tk.Label(self.cam_frame_1, text = 'Trigger Source: ', font = 'Helvetica 10').place(x = 5 , y = 100)
+        tk.Label(self.cam_frame_1, text = 'Trigger Source: ', font = 'Helvetica 10').place(x = -135, relx = 0.5
+            , y = 100, rely = 0
+            , anchor = 'nw')
 
         self.triggercheck_val = tk.IntVar()
         self.checkbtn_trigger_src = tk.Checkbutton(self.cam_frame_1, text='Internal Trigger', variable = self.triggercheck_val, onvalue=1, offvalue=0, highlightthickness = 0)
         self.checkbtn_trigger_src['command'] = self.trigger_src_func
         self.widget_bind_focus(self.checkbtn_trigger_src)
-        self.checkbtn_trigger_src.place(x=5 ,y=90+33)
+        # self.checkbtn_trigger_src.place(x=5 ,y=90+33)
+        self.checkbtn_trigger_src.place(x = -130, relx = 0.5
+            , y = 122, rely = 0
+            , anchor = 'nw')
+
         self.checkbtn_trigger_src['state'] = 'disable'
 
         # self.trigger_src_list = ['LINE0', 'LINE1', 'LINE2', 'LINE3', 'COUNTER0', 'SOFTWARE']
@@ -2180,16 +2369,32 @@ class Hikvision_GUI(tk.Frame):
         # self.trigger_src_select.current(0)
         # self.trigger_src_select.place(x=5, y=90+33)
 
+        self.btn_trigger_once = tk.Button(self.cam_frame_1, text='Trigger Once', width=15, height=1, relief = tk.GROOVE)
+        self.btn_trigger_once['command'] = self.trigger_once
+        self.widget_bind_focus(self.btn_trigger_once)
+        self.btn_trigger_once['state'] = 'disable'
+        # self.btn_trigger_once.place(x=150 + 15, y=90+30)
+        self.btn_trigger_once.place(x = -118, relx = 0.9
+            , y = 118, rely = 0
+            , anchor = 'nw')
+
+
         tk.Label(self.cam_frame_1, text = 'Main Controls: ', font = 'Helvetica 11 bold').place(x=0, y=0)
         self.radio_continuous = tk.Radiobutton(self.cam_frame_1, text='Continuous',variable = self.cam_mode_var, value='continuous',width=15, height=1)
         self.radio_continuous['command'] = self.set_triggermode
         self.widget_bind_focus(self.radio_continuous)
-        self.radio_continuous.place(x=5 + 15,y=5 + 25)
+        # self.radio_continuous.place(x=5 + 15,y=5 + 25)
+        self.radio_continuous.place(x = -130, relx = 0.5
+            , y = 30, rely = 0
+            , anchor = 'nw')
 
         self.radio_trigger = tk.Radiobutton(self.cam_frame_1, text='Trigger Mode',variable = self.cam_mode_var, value='triggermode',width=15, height=1)
         self.radio_trigger['command'] = self.set_triggermode
         self.widget_bind_focus(self.radio_trigger)
-        self.radio_trigger.place(x=145 + 15,y=5 +25)
+        # self.radio_trigger.place(x=145 + 15,y=5 +25)
+        self.radio_trigger.place(x = -138, relx = 0.9
+            , y = 30, rely = 0
+            , anchor = 'nw')
 
         # self.btn_start_grabbing = tk.Button(self.cam_frame_1, text='START', width=5, height=1, relief = tk.GROOVE,
         #     activebackground = 'forest green', bg = 'green3', activeforeground = 'white', fg = 'white', font = 'Helvetica 12 bold')
@@ -2203,18 +2408,20 @@ class Hikvision_GUI(tk.Frame):
 
         self.btn_grab_frame = tk.Button(self.cam_frame_1, text='START', width=6, height=1, relief = tk.GROOVE,
             activebackground = 'forest green', bg = 'green3', activeforeground = 'white', fg = 'white', font = 'Helvetica 12 bold')
-        self.btn_grab_frame['command'] = self.start_grabbing
+        # self.btn_grab_frame['command'] = self.start_grabbing
+        self.grab_btn_init_state(self.btn_grab_frame, self.start_grabbing)
+
         self.widget_bind_focus(self.btn_grab_frame)
-        self.btn_grab_frame.place(x=35 + 15, y=40+25)
+        # self.btn_grab_frame.place(x=35 + 15, y=40+25)
+        self.btn_grab_frame.place(x = -40, relx = 0.5
+            , y = 60, rely = 0
+            , anchor = 'ne')
 
         self.capture_img_checkbtn = tk.Checkbutton(self.cam_frame_1, text='Freeze Image', variable = self.capture_img_status, onvalue=1, offvalue=0)
-        self.capture_img_checkbtn.place(x=176,y=40+25)
-
-        self.btn_trigger_once = tk.Button(self.cam_frame_1, text='Trigger Once', width=15, height=1, relief = tk.GROOVE)
-        self.btn_trigger_once['command'] = self.trigger_once
-        self.widget_bind_focus(self.btn_trigger_once)
-        self.btn_trigger_once['state'] = 'disable'
-        self.btn_trigger_once.place(x=150 + 15, y=90+30)
+        # self.capture_img_checkbtn.place(x=176,y=40+25)
+        self.capture_img_checkbtn.place(x = -122, relx = 0.9
+            , y = 60, rely = 0
+            , anchor = 'nw')
         ###############################################################################################################################
         
         tk.Label(self.cam_frame_2, text = 'Save Images: ', font = 'Helvetica 11 bold').place(x=0, y=0)
@@ -2222,20 +2429,23 @@ class Hikvision_GUI(tk.Frame):
         self.btn_save_sq = tk.Button(self.cam_frame_2, text='Save SQ Frame', width=15, height=1, relief = tk.GROOVE)
         self.btn_save_sq['command'] = self.sq_frame_save
         self.widget_bind_focus(self.btn_save_sq)
-        #self.btn_save_sq.place(x=20, y=30)
 
         self.btn_save_img = tk.Button(self.cam_frame_2, text='Save Image', width=15, height=1, relief = tk.GROOVE)
         self.btn_save_img['command'] = self.img_save_func
-        # self.btn_save_img['command'] = self.custom_img_save_func
         self.widget_bind_focus(self.btn_save_img)
-        self.btn_save_img.place(x=20, y=30)
 
         self.label_save_img_format = tk.Label(self.cam_frame_2, text = 'Image Format: ', font = 'Helvetica 10')
         self.save_img_format_sel = CustomBox(self.cam_frame_2, values=self.save_img_format_list, width=5, state='readonly', font = 'Helvetica 11')
         self.save_img_format_sel.unbind_class("TCombobox", "<MouseWheel>")
         self.save_img_format_sel.current(0)
-        self.label_save_img_format.place(x=160,  y=5)
-        self.save_img_format_sel.place(x=160, y=30)
+        # self.label_save_img_format.place(x=160,  y=5)
+        # self.save_img_format_sel.place(x=160, y=30)
+        self.label_save_img_format.place(x = -98, relx = 0.9
+            , y = 5, rely = 0
+            , anchor = 'nw')
+        self.save_img_format_sel.place(x = -98, relx = 0.9
+            , y = 30, rely = 0
+            , anchor = 'nw')
 
         self.set_custom_save_checkbtn = tk.Checkbutton(self.cam_frame_2, text='Custom Save', variable = self.set_custom_save_bool, onvalue=1, offvalue=0)
         self.set_custom_save_checkbtn['command'] = self.set_custom_save
@@ -2243,7 +2453,17 @@ class Hikvision_GUI(tk.Frame):
         self.trigger_auto_save_bool = tk.IntVar(value = 0)
         self.trigger_auto_save_checkbtn = tk.Checkbutton(self.cam_frame_2, text='Trigger Mode Auto Save', variable = self.trigger_auto_save_bool, onvalue=1, offvalue=0)
         self.trigger_auto_save_checkbtn['command'] = self.set_trigger_autosave
-        #self.trigger_auto_save_checkbtn.place(x=20,y=60)
+
+        self.folder_dir_btn = tk.Button(self.cam_frame_2, relief = tk.GROOVE)#, width = 2, height = 1)
+        self.folder_dir_btn['bg'] = 'gold'
+        self.folder_dir_btn['command'] = partial(open_save_folder, folder_path = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images"), create_bool = True)
+        self.folder_dir_btn['image'] = self.folder_icon
+        CreateToolTip(self.folder_dir_btn, 'Open Save Folder'
+            , 32, -5, font = 'Tahoma 11')
+
+        self.folder_dir_btn.place(x = -85, relx = 0.9
+            , y = 75, rely = 0
+            , anchor = 'nw')
 
         self.SQ_auto_save_bool = tk.IntVar(value = 0)
         self.SQ_auto_save_checkbtn = tk.Checkbutton(self.cam_frame_2, text='SQ Frame(s) Auto Save', variable = self.SQ_auto_save_bool, onvalue=1, offvalue=0)
@@ -2276,12 +2496,12 @@ class Hikvision_GUI(tk.Frame):
         self.btn_enable_framerate = tk.Button(self.cam_frame_3, image = self.toggle_OFF_button_img, borderwidth=0)
         self.btn_enable_framerate['command'] = self.enable_framerate
         self.widget_bind_focus(self.btn_enable_framerate)
-        
-        label_framerate.place(x=35+ shift_x, y=60 + 30)
-        info_framerate.place(x=0+ shift_x, y=60 + 30)
-        label_framerate_enable.place(x=23+ shift_x, y= 35 + 30)
-        self.entry_framerate.place(x=130+ shift_x, y=60 + 30)
-        self.btn_enable_framerate.place(x=130 + shift_x, y =30 +30)
+
+        info_framerate.place(x = -140, relx = 0.5, y = 90, rely = 0, anchor = 'nw')
+        label_framerate.place(x = 0, relx = 0.5, y = 90, rely = 0, anchor = 'ne')
+        label_framerate_enable.place(x = 0, relx = 0.5, y = 65, rely = 0, anchor = 'ne')
+        self.entry_framerate.place(x = 10, relx = 0.5, y = 90, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
+        self.btn_enable_framerate.place(x = 10, relx = 0.5, y = 60, rely = 0, anchor = 'nw')
 
         ###############################################################################################################################
         label_exposure = tk.Label(self.cam_frame_3, text='Exposure Time', width=12, anchor = 'e')
@@ -2306,11 +2526,11 @@ class Hikvision_GUI(tk.Frame):
         self.btn_auto_exposure['command'] = self.set_auto_exposure
         self.widget_bind_focus(self.btn_auto_exposure)
 
-        label_exposure.place(x=35+ shift_x, y= 60 + 55 + 30)
-        info_exposure.place(x=0+ shift_x, y= 60 + 55 + 30)
-        label_auto_exposure.place(x=35+ shift_x, y= 35 + 55 + 30)
-        self.entry_exposure.place(x=130+ shift_x, y=60 + 55 + 30)
-        self.btn_auto_exposure.place(x=130+ shift_x, y=30 + 55 + 30)
+        info_exposure.place(x = -140, relx = 0.5, y = 145, rely = 0, anchor = 'nw')
+        label_exposure.place(x = 0, relx = 0.5, y = 145, rely = 0, anchor = 'ne')
+        label_auto_exposure.place(x = 0, relx = 0.5, y = 120, rely = 0, anchor = 'ne')
+        self.entry_exposure.place(x = 10, relx = 0.5, y = 145, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
+        self.btn_auto_exposure.place(x = 10, relx = 0.5, y = 115, rely = 0, anchor = 'nw')
 
         ###############################################################################################################################
         label_gain = tk.Label(self.cam_frame_3, text='Gain', width=12, anchor = 'e')
@@ -2336,12 +2556,11 @@ class Hikvision_GUI(tk.Frame):
         self.btn_auto_gain['command'] = self.set_auto_gain
         self.widget_bind_focus(self.btn_auto_gain)
 
-        label_gain.place(x=35+ shift_x, y=60 + 110 + 30)
-        info_gain.place(x=0+ shift_x, y=60 + 110 + 30)
-        label_auto_gain.place(x=35+ shift_x, y= 35 + 110 + 30)
-        self.entry_gain.place(x=130+ shift_x, y=60 + 110 + 30)
-        self.btn_auto_gain.place(x=130 + shift_x, y =30 + 110 + 30)
-
+        info_gain.place(x = -140, relx = 0.5, y = 200, rely = 0, anchor = 'nw')
+        label_gain.place(x = 0, relx = 0.5, y = 200, rely = 0, anchor = 'ne')
+        label_auto_gain.place(x = 0, relx = 0.5, y = 175, rely = 0, anchor = 'ne')
+        self.entry_gain.place(x = 10, relx = 0.5, y = 200, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
+        self.btn_auto_gain.place(x = 10, relx = 0.5, y = 170, rely = 0, anchor = 'nw')
         ###############################################################################################################################
         label_brightness = tk.Label(self.cam_frame_3, text='Brightness', width=12, anchor = 'e')
         info_brightness = tk.Label(self.cam_frame_3, image = self.info_icon)
@@ -2361,10 +2580,10 @@ class Hikvision_GUI(tk.Frame):
         self.entry_brightness['command'] = self.set_parameter_brightness
 
         self.entry_brightness['state'] = 'disable'
-        label_brightness.place(x=35+ shift_x, y=35 + 165 + 30)
-        info_brightness.place(x=0+ shift_x, y=35 + 165 + 30)
-        self.entry_brightness.place(x=130+ shift_x, y=35 + 165 + 30)
 
+        info_brightness.place(x = -140, relx = 0.5, y = 230, rely = 0, anchor = 'nw')
+        label_brightness.place(x = 0, relx = 0.5, y = 230, rely = 0, anchor = 'ne')
+        self.entry_brightness.place(x = 10, relx = 0.5, y = 230, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
         ###############################################################################################################################
         label_auto_white = tk.Label(self.cam_frame_3, text = 'Auto White Balance', anchor = 'e')
 
@@ -2372,34 +2591,42 @@ class Hikvision_GUI(tk.Frame):
         self.btn_auto_white['command'] = self.set_auto_white
         self.widget_bind_focus(self.btn_auto_white)
 
-        self.win_balance_ratio = tk.Frame(self.cam_frame_3, width = 165, height = 70+2)#, bg = 'grey')
-        label_balance_ratio = tk.Label(self.win_balance_ratio, text = 'Balance Ratio', anchor = 'e')
+        
+        self.balance_ratio_lb_tag = tk.Frame(self.cam_frame_3, width = 100, height = 72)
+        self.balance_ratio_param = tk.Frame(self.cam_frame_3, width = 60, height = 72)
+
+        label_balance_ratio = tk.Label(self.balance_ratio_lb_tag, text = 'Balance Ratio', anchor = 'e')
 
         info_balance_ratio = tk.Label(self.cam_frame_3, image = self.info_icon)
         CreateToolTip(info_balance_ratio, 'Balance Ratio: \n' + 'Gamma correction of pixel intensity,\nwhich helps optimizing the brightness\n'+ \
             'of acquired images for displaying\n'+ 'on a monitor.' +'\n\n'+ 'Min: 1\nMax: 4095'
             , -220, -40, width = 220, height = 140)
 
-        red_tag = tk.Frame(self.win_balance_ratio, width = 20, height = 20, bg = 'red')
-        green_tag = tk.Frame(self.win_balance_ratio, width = 20, height = 20, bg = 'green')
-        blue_tag = tk.Frame(self.win_balance_ratio, width = 20, height = 20, bg = 'blue')
+        red_tag = tk.Frame(self.balance_ratio_lb_tag, width = 20, height = 20, bg = 'red')
+        green_tag = tk.Frame(self.balance_ratio_lb_tag, width = 20, height = 20, bg = 'green')
+        blue_tag = tk.Frame(self.balance_ratio_lb_tag, width = 20, height = 20, bg = 'blue')
+
+        label_balance_ratio.place(x=0, y= 25)
+        red_tag.place(x=80,y=0)
+        green_tag.place(x=80,y=25)
+        blue_tag.place(x=80,y=50)
 
         self.red_ratio_str = tk.StringVar()
         self.green_ratio_str = tk.StringVar()
         self.blue_ratio_str = tk.StringVar()
-        self.entry_red_ratio = tk.Spinbox(self.win_balance_ratio, textvariable = self.red_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
+        self.entry_red_ratio = tk.Spinbox(self.balance_ratio_param, textvariable = self.red_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
         self.entry_red_ratio.bind('<Return>', self.set_parameter_red_ratio)
         self.entry_red_ratio.bind('<Tab>', self.set_parameter_red_ratio)
         self.entry_red_ratio.bind('<FocusOut>', self.set_parameter_red_ratio)
         self.entry_red_ratio['command'] = self.set_parameter_red_ratio
 
-        self.entry_green_ratio = tk.Spinbox(self.win_balance_ratio, textvariable = self.green_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
+        self.entry_green_ratio = tk.Spinbox(self.balance_ratio_param, textvariable = self.green_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
         self.entry_green_ratio.bind('<Return>', self.set_parameter_green_ratio)
         self.entry_green_ratio.bind('<Tab>', self.set_parameter_green_ratio)
         self.entry_green_ratio.bind('<FocusOut>', self.set_parameter_green_ratio)
         self.entry_green_ratio['command'] = self.set_parameter_green_ratio
 
-        self.entry_blue_ratio = tk.Spinbox(self.win_balance_ratio, textvariable = self.blue_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
+        self.entry_blue_ratio = tk.Spinbox(self.balance_ratio_param, textvariable = self.blue_ratio_str, highlightbackground="black", highlightthickness=1, width = 7, from_=1, to= 4095)
         self.entry_blue_ratio.bind('<Return>', self.set_parameter_blue_ratio)
         self.entry_blue_ratio.bind('<Tab>', self.set_parameter_blue_ratio)
         self.entry_blue_ratio.bind('<FocusOut>', self.set_parameter_blue_ratio)
@@ -2412,19 +2639,15 @@ class Hikvision_GUI(tk.Frame):
         int_validate(self.entry_green_ratio, limits = (1,4095))
         int_validate(self.entry_blue_ratio, limits = (1,4095))
 
-        label_balance_ratio.place(x=0, y= 25)
-        red_tag.place(x=80,y=0)
-        green_tag.place(x=80,y=25)
-        blue_tag.place(x=80,y=50)
+        self.entry_red_ratio.place(x=0, y=0, relwidth = 1, anchor = 'nw')
+        self.entry_green_ratio.place(x=0, y=25, relwidth = 1, anchor = 'nw')
+        self.entry_blue_ratio.place(x=0, y=50, relwidth = 1, anchor = 'nw')
 
-        self.entry_red_ratio.place(x=105, y=0)
-        self.entry_green_ratio.place(x=105, y=25)
-        self.entry_blue_ratio.place(x=105, y=50)
-
-        label_auto_white.place(x=15 +shift_x, y=35 + 193 + 30) # 165 + 55/2 = 165 + 28 = 193
-        self.btn_auto_white.place(x=130 + shift_x, y =30 + 193 + 30)
-        info_balance_ratio.place(x=0+ shift_x, y = 85 + 193 + 30)
-        self.win_balance_ratio.place(x=25 +shift_x, y= 60 + 193 + 30) #165 + 55
+        info_balance_ratio.place(x = -140, relx = 0.5, y = 308, rely = 0, anchor = 'nw')
+        label_auto_white.place(x = 0, relx = 0.5, y = 258, rely = 0, anchor = 'ne')
+        self.btn_auto_white.place(x = 10, relx = 0.5, y = 253, rely = 0, anchor = 'nw')
+        self.balance_ratio_lb_tag.place(x = 0, relx = 0.5, y = 283, rely = 0, anchor = 'ne')
+        self.balance_ratio_param.place(x = 10, relx = 0.5, y = 283, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
         
         ###############################################################################################################################
         label_black_lvl = tk.Label(self.cam_frame_3, text='Black Level', width=12, anchor = 'e')
@@ -2446,11 +2669,11 @@ class Hikvision_GUI(tk.Frame):
         self.btn_enable_black_lvl['command'] = self.enable_black_lvl
         self.widget_bind_focus(self.btn_enable_black_lvl)
 
-        label_black_lvl.place(x=35+ shift_x, y=60 + 303 + 30) #193 + 55 + 55 = 303
-        info_black_lvl.place(x = 0+ shift_x, y=60 + 303 + 30)
-        label_black_lvl_enable.place(x=23+ shift_x, y= 35 + 303 + 30)
-        self.entry_black_lvl.place(x=130+ shift_x, y=60 + 303 + 30)
-        self.btn_enable_black_lvl.place(x=130 + shift_x, y =30 + 303 + 30)
+        info_black_lvl.place(x = -140, relx = 0.5, y = 393, rely = 0, anchor = 'nw')
+        label_black_lvl.place(x = 0, relx = 0.5, y = 393, rely = 0, anchor = 'ne')
+        label_black_lvl_enable.place(x = 0, relx = 0.5, y = 368, rely = 0, anchor = 'ne')
+        self.entry_black_lvl.place(x = 10, relx = 0.5, y = 393, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
+        self.btn_enable_black_lvl.place(x = 10, relx = 0.5, y = 363, rely = 0, anchor = 'nw')
 
         ###############################################################################################################################
         label_sharpness = tk.Label(self.cam_frame_3, text='Sharpness', width=12, anchor = 'e')
@@ -2474,24 +2697,23 @@ class Hikvision_GUI(tk.Frame):
         self.btn_enable_sharpness = tk.Button(self.cam_frame_3, image = self.toggle_OFF_button_img, borderwidth=0)
         self.btn_enable_sharpness['command'] = self.enable_sharpness
         self.widget_bind_focus(self.btn_enable_sharpness)
-        
-        label_sharpness.place(x=35+ shift_x, y=60 + 358 + 30)
-        info_sharpness.place(x = 0+ shift_x, y=60 + 358 + 30)
-        label_sharpness_enable.place(x=23+ shift_x, y= 35 + 358 + 30)
-        self.entry_sharpness.place(x=130+ shift_x, y=60 + 358 + 30)
-        self.btn_enable_sharpness.place(x=130 + shift_x, y =30 + 358 + 30)
 
+        info_sharpness.place(x = -140, relx = 0.5, y = 448, rely = 0, anchor = 'nw')
+        label_sharpness.place(x = 0, relx = 0.5, y = 448, rely = 0, anchor = 'ne')
+        label_sharpness_enable.place(x = 0, relx = 0.5, y = 423, rely = 0, anchor = 'ne')
+        self.entry_sharpness.place(x = 10, relx = 0.5, y = 448, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
+        self.btn_enable_sharpness.place(x = 10, relx = 0.5, y = 418, rely = 0, anchor = 'nw')
         ###############################################################################################################################
 
         self.btn_get_parameter = tk.Button(self.cam_frame_3, text='Read Parameter', width=15, height=1, relief = tk.GROOVE)
         self.btn_get_parameter['command'] = self.get_parameter
         self.widget_bind_focus(self.btn_get_parameter)
-        self.btn_get_parameter.place(x=20, y=35 + 418 + 30)
+        self.btn_get_parameter.place(x = -10, relx = 0.5, y = 485, rely = 0, anchor = 'ne')
 
         self.btn_set_parameter = tk.Button(self.cam_frame_3, text='Set Parameter', width=15, height=1, relief = tk.GROOVE)
         self.btn_set_parameter['command'] = self.set_parameter
         self.widget_bind_focus(self.btn_set_parameter)
-        self.btn_set_parameter.place(x=160, y=35 + 418 + 30)
+        self.btn_set_parameter.place(x = 10, relx = 0.5, y = 485, rely = 0, anchor = 'nw')
         ###############################################################################################################################
 
         label_pixel_format = tk.Label(self.cam_frame_3, text = 'Pixel Format', width=12, anchor = 'e')
@@ -2500,53 +2722,24 @@ class Hikvision_GUI(tk.Frame):
             , -150, 0, width = 150, height = 40)
 
         self.pixel_format_list = ["Mono 8", "Mono 10", "Mono 10 Packed", "Mono 12", "Mono 12 Packed", "RGB 8", "BGR 8", "YUV 422 (YUYV) Packed", "YUV 422 Packed", "Bayer RG 8", "Bayer RG 10", "Bayer RG 10 Packed", "Bayer RG 12", "Bayer RG 12 Packed"]
-        self.pixel_format_combobox = CustomBox(self.cam_frame_3, width=15, state='readonly', font = 'Helvetica 11')
+        # self.pixel_format_combobox = CustomBox(self.cam_frame_3, width=15, state='readonly', font = 'Helvetica 11')
+        self.pixel_format_combobox = CustomBox(self.cam_frame_3, state='readonly', font = 'Helvetica 11')
         self.pixel_format_combobox['values'] = self.pixel_format_list
         self.pixel_format_combobox.unbind_class("TCombobox", "<MouseWheel>")
         self.pixel_format_combobox.bind('<<ComboboxSelected>>', lambda event: self.pixel_format_sel(event = event))
 
-        label_pixel_format.place(x=35 + shift_x, y =30)
-        info_pixel_format.place(x=0+ shift_x, y = 30)
-        self.pixel_format_combobox.place(x=130 + shift_x, y= 30)
-
-    def grab_btn_state(self):
-        if self.btn_grab_frame['text'] == 'START':
-            self.btn_grab_frame['text'] = 'STOP'
-            self.btn_grab_frame['activebackground'] = 'red3'
-            self.btn_grab_frame['bg'] = 'red'
-            self.btn_grab_frame['activeforeground'] = 'white'
-            self.btn_grab_frame['fg'] = 'white'
-            self.btn_grab_frame['command'] = self.stop_grabbing
-
-        elif self.btn_grab_frame['text'] == 'STOP':
-            self.btn_grab_frame['text'] = 'START'
-            self.btn_grab_frame['activebackground'] = 'forest green'
-            self.btn_grab_frame['bg'] = 'green3'
-            self.btn_grab_frame['activeforeground'] = 'white'
-            self.btn_grab_frame['fg'] = 'white'
-            self.btn_grab_frame['command'] = self.start_grabbing
-
-    def grab_btn_init_state(self):
-        self.btn_grab_frame['text'] = 'START'
-        self.btn_grab_frame['activebackground'] = 'forest green'
-        self.btn_grab_frame['bg'] = 'green3'
-        self.btn_grab_frame['activeforeground'] = 'white'
-        self.btn_grab_frame['fg'] = 'white'
-        self.btn_grab_frame['command'] = self.start_grabbing
-
+        info_pixel_format.place(x = -140, relx = 0.5, y = 30, rely = 0, anchor = 'nw')
+        label_pixel_format.place(x = 0, relx = 0.5, y = 30, rely = 0, anchor = 'ne')
+        self.pixel_format_combobox.place(x = 10, relx = 0.5, y = 30, rely = 0, width = -40, relwidth = 0.5, anchor = 'nw')
     
-    def grab_btn_state_v2(self, btn, func = None):
+    def grab_btn_state(self, btn, func):
         if btn['text'] == 'START':
             btn['text'] = 'STOP'
             btn['activebackground'] = 'red3'
             btn['bg'] = 'red'
             btn['activeforeground'] = 'white'
             btn['fg'] = 'white'
-            try:
-                btn['command'] = func
-            except Exception: #as e:
-                # print('Error for grab_btn_state: ', e)
-                pass
+            btn['command'] = func
 
         elif btn['text'] == 'STOP':
             btn['text'] = 'START'
@@ -2554,23 +2747,16 @@ class Hikvision_GUI(tk.Frame):
             btn['bg'] = 'green3'
             btn['activeforeground'] = 'white'
             btn['fg'] = 'white'
-            try:
-                btn['command'] = func
-            except Exception: #as e:
-                # print('Error for grab_btn_state: ', e)
-                pass
+            btn['command'] = func
 
-    def grab_btn_init_state_v2(self, btn, func = None):
+    def grab_btn_init_state(self, btn, func):
         btn['text'] = 'START'
         btn['activebackground'] = 'forest green'
         btn['bg'] = 'green3'
         btn['activeforeground'] = 'white'
         btn['fg'] = 'white'
-        try:
-            btn['command'] = func
-        except Exception: #as e:
-            # print('Error for grab_btn_state: ', e)
-            pass
+        btn['command'] = func
+
 
     def camera_control_state(self):
         if self.cam_conn_status == False:
@@ -2590,7 +2776,9 @@ class Hikvision_GUI(tk.Frame):
             widget_disable(self.btn_enable_sharpness, self.entry_sharpness)
             widget_disable(self.btn_save_sq)
 
-            widget_disable(self.btn_normal_cam_mode, self.btn_SQ_cam_mode)
+            widget_disable(self.btn_normal_cam_mode
+                , self.btn_SQ_cam_mode
+                )
 
             #self.trigger_src_select['state'] = 'disable'
             
@@ -2619,7 +2807,7 @@ class Hikvision_GUI(tk.Frame):
             self.SQ_auto_save_bool.set(0)
 
 
-            self.time_lapse_label.place_forget()
+            # self.time_lapse_label.place_forget()
             self.time_lapse_var.set('')
             widget_disable(self.record_setting_btn)
 
@@ -2640,7 +2828,9 @@ class Hikvision_GUI(tk.Frame):
             widget_enable(self.btn_enable_black_lvl)
             widget_enable(self.btn_enable_sharpness)
 
-            widget_enable(self.btn_normal_cam_mode, self.btn_SQ_cam_mode)
+            widget_enable(self.btn_normal_cam_mode
+                , self.btn_SQ_cam_mode
+                )
 
             self.pixel_format_combobox['state'] = 'readonly'
 
@@ -2668,7 +2858,7 @@ class Hikvision_GUI(tk.Frame):
             self.sharpness_btn_state()
             self.camera_brightness_entry_state()
 
-            self.time_lapse_label.place(x= self.cam_display_width + self.cam_display_width - 125, y= 0+2, anchor = 'ne')
+            # self.time_lapse_label.place(x = -10-25-5-25-5-25-5-25-5, y = 1, relx = 1, rely = 0, anchor = 'ne')
             self.time_lapse_var.set('')
             widget_enable(self.record_setting_btn)
 
@@ -2740,21 +2930,15 @@ class Hikvision_GUI(tk.Frame):
             self.btn_enable_sharpness['image'] = self.toggle_OFF_button_img
             self.entry_sharpness['state'] = 'disable'
 
-    def camera_no_display_func(self):
-        self.dummy_canvas_rgb.create_image(self.cam_display_width/2, self.cam_display_height/2, image=self.cam_disconnect_img, anchor='center', tags='img')
-        self.dummy_canvas_rgb.image = self.cam_disconnect_img
 
-        self.dummy_canvas_R.create_image(self.cam_display_width/2, self.cam_display_height/2, image=self.cam_disconnect_img, anchor='center', tags='img')
-        self.dummy_canvas_R.image = self.cam_disconnect_img
-
-        self.dummy_canvas_G.create_image(self.cam_display_width/2, self.cam_display_height/2, image=self.cam_disconnect_img, anchor='center', tags='img')
-        self.dummy_canvas_G.image = self.cam_disconnect_img
-
-        self.dummy_canvas_B.create_image(self.cam_display_width/2, self.cam_display_height/2, image=self.cam_disconnect_img, anchor='center', tags='img')
-        self.dummy_canvas_B.image = self.cam_disconnect_img
+    def camera_disconnect_disp(self, event, tk_canvas):
+        # print(event.width, event.height)
+        tk_canvas.delete('img')
+        tk_canvas.create_image(event.width/2, event.height/2, image=self.cam_disconnect_img, anchor='center', tags='img')
+        tk_canvas.image = self.cam_disconnect_img
 
     ###############################################################################################
-    #4. CAMERA GUI FUNCTIONS (HIKVISION)
+    #6. CAMERA GUI FUNCTIONS (HIKVISION)
     def open_device(self, hikvision_devList, nSelCamIndex = 0):
         if True == self.cam_conn_status:
             Info_Msgbox(message = 'Camera is Running!', font = 'Helvetica 10', message_anchor = 'w')
@@ -2808,14 +2992,13 @@ class Hikvision_GUI(tk.Frame):
     # ch:开始取流 | en:Start grab image
     def start_grabbing(self):
         self.cam_display_place_GUI_1()
-        # self.clear_display_GUI_1()
 
-        self.cam_disp_current_frame.place(x = 0, y = 0+25)
+        self.cam_disp_sq_live.place(x = 0, y = 25, relx = 0, rely = 0, relwidth = 1, relheight = 0.5, height = -25, anchor = 'nw')
 
         ret = self.obj_cam_operation.Start_grabbing()
         if ret == 0:
             self.__start_grab = True
-            self.grab_btn_state()
+            self.grab_btn_state(self.btn_grab_frame, self.stop_grabbing)
             self.pixel_format_combobox['state'] = 'disable'
             
         else:
@@ -2832,11 +3015,10 @@ class Hikvision_GUI(tk.Frame):
         #self.start_grab_status = False
 
         self.cam_display_forget_GUI_1()
-        # self.clear_display_GUI_1()
 
-        self.cam_disp_current_frame.place_forget()
+        self.cam_disp_sq_live.place_forget()
         self.cam_popout_close()
-        self.grab_btn_state()
+        self.grab_btn_state(self.btn_grab_frame, self.start_grabbing)
         self.pixel_format_combobox['state'] = 'readonly'
 
     # ch:关闭设备 | Close device
@@ -2861,7 +3043,7 @@ class Hikvision_GUI(tk.Frame):
 
         self.cam_display_forget_GUI_1()
 
-        self.cam_disp_current_frame.place_forget()
+        self.cam_disp_sq_live.place_forget()
 
         self.clear_display_GUI_2()
         
@@ -2882,7 +3064,8 @@ class Hikvision_GUI(tk.Frame):
         del self.cam_sq_frame_cache
         self.cam_sq_frame_cache = None
         ##############################################################################
-        self.grab_btn_init_state()
+        self.grab_btn_init_state(self.btn_grab_frame, self.start_grabbing)
+
         self.cam_conn_status = False
         self._pause_auto_toggle = False
 
@@ -3055,8 +3238,8 @@ class Hikvision_GUI(tk.Frame):
             # print(self.save_img_format_sel.get())
             file_im_format = [(str(self.save_img_format_sel.get()).upper() + ' file', '*' + str(self.save_img_format_sel.get()))]
 
-            # f = filedialog.asksaveasfilename(defaultextension = file_im_format, filetypes = file_im_format, confirmoverwrite=False)
-            f = filedialog.asksaveasfilename(defaultextension = file_im_format, filetypes = file_im_format)
+            # f = filedialog.asksaveasfilename(initialdir = self.__save_curr_dir, defaultextension = file_im_format, filetypes = file_im_format, confirmoverwrite=False)
+            f = filedialog.asksaveasfilename(initialdir = self.__save_curr_dir, defaultextension = file_im_format, filetypes = file_im_format)
             
             if True == self.cam_popout_toplvl.check_open():
                 self.cam_popout_toplvl.show()
@@ -3085,6 +3268,8 @@ class Hikvision_GUI(tk.Frame):
                 # print(file_name)
                 # print(file_extension)
                 # print(os.path.exists(f))
+                self.__save_curr_dir = folder_name
+
                 if (os.path.exists(f)) == True:
                     self.obj_cam_operation.set_custom_save_param(folder_name, file_name, overwrite_bool = True)
                 else:
@@ -3592,6 +3777,7 @@ class Hikvision_GUI(tk.Frame):
         if hex_id is not None:
             ret_flag = self.obj_cam_operation.Set_Pixel_Format(hex_id)
             if ret_flag == 0:
+
                 if self.obj_cam_operation.Pixel_Format_Mono(_pixel_format) == True:
                     self.popout_ch_sel_btn_state(rgb_bool = False)
 

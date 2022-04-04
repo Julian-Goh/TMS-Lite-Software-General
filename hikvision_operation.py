@@ -24,6 +24,9 @@ import cv2
 import tkinter as tk
 
 from Tk_MsgBox.custom_msgbox import Ask_Msgbox, Info_Msgbox, Error_Msgbox, Warning_Msgbox
+from os_create_folder import create_save_folder
+from TMS_file_save import cv_img_save, pil_img_save, PDF_img_save, PDF_img_list_save, np_to_PIL
+import image_resize as custom_imresize
 
 from tkinter import ttk
 
@@ -63,33 +66,6 @@ def int2Hex(num):
     #return byte_#byte_[::-1]  # return in little endian
     return str_hex
 
-def create_save_folder(folder_dir = os.getcwd() + r'\TMS_Saved_Images', duplicate = False):
-    if duplicate == True:
-        if path.exists(folder_dir):
-            index = 0
-            loop = True
-            while loop == True:
-                new_dir = folder_dir + '({})'.format(index)
-                if path.exists(new_dir):
-                    index = index + 1
-                else:
-                    os.mkdir(new_dir)
-                    loop = False
-
-            return new_dir
-
-        else:
-            os.mkdir(folder_dir)
-            return folder_dir
-    else:
-        if path.exists(folder_dir):
-            #print ('File already exists')
-            pass
-        else:
-            os.mkdir(folder_dir)
-            #print ('File created')
-        return folder_dir
-
 def video_file_name(folder, file_name):
     index = 0
     loop = True
@@ -114,120 +90,32 @@ def text_file_name(folder, file_name):
 
     return file_path
 
-def cv_img_save(folder, img_arr, img_name, img_format, kw_str = '', overwrite = False):
-    index = 0
+def display_func(display, ref_img, resize_status = True, interpolation = cv2.INTER_LINEAR):
+    if isinstance(display, tk.Canvas):
+        display.update_idletasks()
+        if display.winfo_ismapped() == True:
+            if resize_status == True:
+                imheight, imwidth = ref_img.shape[:2]
+                img_aspect = np.divide(imwidth, imheight)
+                disp_aspect = np.divide(display.winfo_width(), display.winfo_height())
+                
+                if img_aspect > disp_aspect:
+                    img_resize = custom_imresize.opencv_img_resize(ref_img, width = min(display.winfo_width(), display.winfo_height()), inter = interpolation)
 
-    if overwrite == False:
-        if (isinstance(kw_str, str) == True) and len(kw_str) > 0:
-            new_img_name = re.sub('(\\'+ kw_str + '\\)' + '(--id)(\\d)' + '$', '', img_name)
-            # new_img_name = re.sub('\\s{2,}', ' ', new_img_name) # Replace all double spaces with single spaces
-            new_img_name = re.sub('\\s$', '', new_img_name) #Remove 1 space from the image name if any, because we will add 1 space in the following loop
-            loop = True
-            while loop == True:
-                img_path = folder + '\\'+ new_img_name + '-' + kw_str + '--id{}'.format(index) + img_format
-                if (path.exists(img_path)) == True:
-                    index = index + 1
-                elif (path.exists(img_path)) == False:
-                    loop = False
+                elif img_aspect < disp_aspect:
+                    img_resize = custom_imresize.opencv_img_resize(ref_img, height = min(display.winfo_width(), display.winfo_height()), inter = interpolation)
 
-        else:
-            loop = True
-            while loop == True:
-                img_path = folder + '\\'+ img_name + '--id{}'.format(index) + img_format
-                if (path.exists(img_path)) == True:
-                    index = index + 1
-                elif (path.exists(img_path)) == False:
-                    loop = False
+                else:
+                    img_resize = custom_imresize.opencv_img_resize(ref_img, width = min(display.winfo_width(), display.winfo_height()), inter = interpolation)
 
-    else:
-        img_path = folder + '\\'+ img_name + img_format
+                img_PIL = Image.fromarray(img_resize)
+            elif resize_status == False:
+                img_PIL = Image.fromarray(ref_img)
 
-    # print(img_path)
-    if len(img_arr.shape) == 3:
-        img_arr = cv2.cvtColor(img_arr, cv2.COLOR_BGR2RGB)
-    cv2.imwrite(img_path, img_arr)
+            img_tk = ImageTk.PhotoImage(img_PIL)
 
-    return img_path, index
-
-def PDF_img_save(folder, img_arr, pdf_name, ch_split_bool = True, kw_str = '', overwrite = False):
-    index = 0
-    if overwrite == False:
-        if (isinstance(kw_str, str) == True) and len(kw_str) > 0:
-            new_pdf_name = re.sub('(\\'+ kw_str + '\\)' + '--(id)(\\d)' + '$', '', pdf_name)
-            new_pdf_name = re.sub('\\s$', '', new_pdf_name) #Remove 1 space from the image name if any, because we will add 1 space in the following loop
-            loop = True
-            while loop == True:
-                pdf_path = folder + '\\'+ new_pdf_name + '-' + kw_str + '--id{}'.format(index) + ".PDF"
-                if (path.exists(pdf_path)) == True:
-                    index = index + 1
-                elif (path.exists(pdf_path)) == False:
-                    loop = False
-
-        else:
-            loop = True
-            while loop == True:
-                pdf_path = folder + '\\'+ pdf_name + '--id{}'.format(index) + ".PDF"
-                if (path.exists(pdf_path)) == True:
-                    index = index + 1
-                elif (path.exists(pdf_path)) == False:
-                    loop = False
-    
-    else:
-        pdf_path = folder + '\\'+ pdf_name + ".PDF"
-
-    pdf_img = np_to_PIL(img_arr)
-    if len(img_arr.shape) == 3:
-        if ch_split_bool == True:
-            pdf_img_R = Image.fromarray(img_arr[:,:,0])
-            pdf_img_G = Image.fromarray(img_arr[:,:,1])
-            pdf_img_B = Image.fromarray(img_arr[:,:,2])
-            pdf_img_list = [pdf_img, pdf_img_R, pdf_img_G, pdf_img_B]
-
-        elif ch_split_bool == False:
-            pdf_img_list = [pdf_img]
-    else:
-        pdf_img_list = [pdf_img]
-
-    pdf_img_list[0].save(pdf_path, save_all=True, append_images= pdf_img_list[1:])
-
-    return pdf_path, index
-
-def PDF_img_list_save(folder, pdf_img_list, pdf_name):
-    index = 0
-    loop = True
-    while loop == True:
-        pdf_path = folder + '\\'+ pdf_name + '--id{}'.format(index) + ".PDF"
-        if (path.exists(pdf_path)) == True:
-            index = index + 1
-        elif (path.exists(pdf_path)) == False:
-            loop = False
-
-    pdf_img_list[0].save(pdf_path, save_all=True, append_images= pdf_img_list[1:])
-
-def np_to_PIL(img_arr):
-    img_PIL = Image.fromarray(img_arr)
-
-    return img_PIL
-
-def display_func(display, ref_img, w, h, resize_status = True, interpolation = cv2.INTER_LINEAR):
-    if resize_status == True:
-        #cv2.INTER_NEAREST, #cv2.INTER_LINEAR
-        #img_resize = imutils.resize(ref_img, height = h)
-        img_resize = cv2.resize(ref_img,(w,h), interpolation = interpolation)
-        # if len(img_resize.shape) == 3:
-        #     img_resize = cv2.cvtColor(img_resize, cv2.COLOR_BGR2RGB)
-
-        img_PIL = Image.fromarray(img_resize)
-    elif resize_status == False:
-        img_PIL = Image.fromarray(ref_img)
-
-    img_tk = ImageTk.PhotoImage(img_PIL)
-    try:
-        display.create_image(w/2, h/2, image=img_tk, anchor='center', tags='img')
-        display.image = img_tk
-    except Exception as e:
-        print('Error display_func: ', e)
-        pass
+            display.create_image(display.winfo_width()/2, display.winfo_height()/2, image=img_tk, anchor='center', tags='img')
+            display.image = img_tk
 
 def clear_display_func(*canvas_widgets):
     for widget in canvas_widgets:
@@ -278,6 +166,8 @@ class Hikvision_Operation():
         self.buf_save_image = buf_save_image
         self.h_thread_handle = h_thread_handle
         self.n_save_image_size = n_save_image_size
+
+        self.__save_dir = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images")
 
         self.b_save = False
         self.custom_b_save = False
@@ -1129,7 +1019,7 @@ class Hikvision_Operation():
                 del self.frame_queue
                 self.frame_queue = None
 
-            save_folder = create_save_folder()
+            save_folder = create_save_folder(folder_dir = self.__save_dir)
             fourcc = cv2.VideoWriter_fourcc(*'XVID') #cv2.VideoWriter_fourcc(*'MP42') #cv2.VideoWriter_fourcc(*'XVID')
             self.video_file = video_file_name(save_folder, 'Output Recording')
 
@@ -1437,14 +1327,12 @@ class Hikvision_Operation():
                     img_format = _cam_class.save_img_format_sel.get()
                     time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
                     # time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                    save_folder = create_save_folder()
+                    save_folder = create_save_folder(folder_dir = self.__save_dir)
 
                     if self.trigger_mode == True:
-                        sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = True)
-                        # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = False)
+                        sub_folder = create_save_folder(save_folder + '\\Trigger--' + time_id, duplicate = True)
                     else:
-                        sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Camera--' + time_id, duplicate = True)
-                        # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Camera--' + time_id, duplicate = False)
+                        sub_folder = create_save_folder(save_folder + '\\Camera--' + time_id, duplicate = True)
 
                     if str(img_format) == '.pdf':
                         _, id_index = PDF_img_save(sub_folder, img_arr, 'Colour', ch_split_bool = False)
@@ -1504,14 +1392,12 @@ class Hikvision_Operation():
                     img_format = _cam_class.save_img_format_sel.get()
                     time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
                     # time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                    save_folder = create_save_folder()
-                    
+                    save_folder = create_save_folder(folder_dir = self.__save_dir)
+
                     if self.trigger_mode == True:
-                        sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = True)
-                        # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = False)
+                        sub_folder = create_save_folder(save_folder + '\\Trigger--' + time_id, duplicate = True)
                     else:
-                        sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Camera--' + time_id, duplicate = True)
-                        # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Camera--' + time_id, duplicate = False)
+                        sub_folder = create_save_folder(save_folder + '\\Camera--' + time_id, duplicate = True)
 
                     if str(img_format) == '.pdf':
                         PDF_img_save(sub_folder, img_arr, 'Mono', ch_split_bool = False)
@@ -1567,9 +1453,10 @@ class Hikvision_Operation():
                 img_format = _cam_class.save_img_format_sel.get()
                 time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
                 # time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                save_folder = create_save_folder()
-                sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = True)
-                # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = False)
+
+                save_folder = create_save_folder(folder_dir = self.__save_dir)
+                sub_folder = create_save_folder(save_folder + '\\Trigger--' + time_id, duplicate = True)
+
                 if str(img_format) == '.pdf':
                     _, id_index = PDF_img_save(sub_folder, img_arr, 'Colour', ch_split_bool = False)
                 else:
@@ -1582,9 +1469,8 @@ class Hikvision_Operation():
                 img_format = _cam_class.save_img_format_sel.get()
                 time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
                 # time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                save_folder = create_save_folder()
-                sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = True)
-                # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\Trigger--' + time_id, duplicate = False)
+                save_folder = create_save_folder(folder_dir = self.__save_dir)
+                sub_folder = create_save_folder(save_folder + '\\Trigger--' + time_id, duplicate = True)
 
                 if str(img_format) == '.pdf':
                     PDF_img_save(sub_folder, img_arr, 'Mono', ch_split_bool = False)
@@ -1699,10 +1585,10 @@ class Hikvision_Operation():
         #Display for Normal Camera Mode
         if True == self.__validate_rgb_img(img_arr):
             try:
-                display_func(_cam_class.cam_display_rgb, img_arr, _cam_class.cam_display_width, _cam_class.cam_display_height)
-                display_func(_cam_class.cam_display_R, img_arr[:,:,0], _cam_class.cam_display_width, _cam_class.cam_display_height)
-                display_func(_cam_class.cam_display_G, img_arr[:,:,1], _cam_class.cam_display_width, _cam_class.cam_display_height)
-                display_func(_cam_class.cam_display_B, img_arr[:,:,2], _cam_class.cam_display_width, _cam_class.cam_display_height)
+                display_func(_cam_class.cam_display_rgb, img_arr)
+                display_func(_cam_class.cam_display_R, img_arr[:,:,0])
+                display_func(_cam_class.cam_display_G, img_arr[:,:,1])
+                display_func(_cam_class.cam_display_B, img_arr[:,:,2])
             
             except(tk.TclError):
                 pass
@@ -1713,9 +1599,8 @@ class Hikvision_Operation():
         #Display for Normal Camera Mode
         if True == self.__validate_mono_img(img_arr):
             try:
-                display_func(_cam_class.cam_display_rgb, img_arr, _cam_class.cam_display_width + _cam_class.cam_display_width +  10
-                    , _cam_class.cam_display_height + _cam_class.cam_display_height + 50)
-
+                display_func(_cam_class.cam_display_rgb, img_arr)
+                
             except(tk.TclError):
                 pass
 
@@ -1765,7 +1650,7 @@ class Hikvision_Operation():
         #Display for SQ Camera Mode
         if True == self.__validate_rgb_img(img_arr) or True == self.__validate_mono_img(img_arr):
             try:
-                display_func(_cam_class.cam_disp_current_frame, img_arr, _cam_class.cam_display_width, _cam_class.cam_display_height)
+                display_func(_cam_class.cam_disp_sq_live, img_arr)
             
             except(tk.TclError):
                 pass
@@ -1774,7 +1659,7 @@ class Hikvision_Operation():
         from main_GUI import main_GUI
         _cam_class = main_GUI.class_cam_conn.active_gui
         try:
-            clear_display_func(_cam_class.cam_disp_current_frame)
+            clear_display_func(_cam_class.cam_disp_sq_live)
 
         except(tk.TclError):
             pass
@@ -1790,10 +1675,9 @@ class Hikvision_Operation():
             if len(img_data) > 0:
                 for i, img_arr in enumerate(img_data):
                     try:
-                        display_func(tk_sq_disp_list[i], img_arr, _cam_class.cam_display_width, _cam_class.cam_display_height)
+                        display_func(tk_sq_disp_list[i], img_arr)
                         self.sq_frame_save_list.append(img_arr)
-                    except Exception:
-                        # print('SQ_frame_display: ', e)
+                    except(tk.TclError):
                         pass
 
                 if self.rgb_type == True and self.mono_type == False:
@@ -1806,10 +1690,9 @@ class Hikvision_Operation():
 
         elif (isinstance(self.loaded_img, np.ndarray)) == True:
             try:
-                display_func(tk_sq_disp_list[tk_disp_id], img_data, _cam_class.cam_display_width, _cam_class.cam_display_height)
+                display_func(tk_sq_disp_list[i], img_arr)
                 self.sq_frame_save_list.append(img_data)
-            except Exception:
-                # print('SQ_frame_display: ', e)
+            except(tk.TclError):
                 pass
 
             if self.rgb_type == True and self.mono_type == False:
@@ -1827,7 +1710,7 @@ class Hikvision_Operation():
             _cam_class = main_GUI.class_cam_conn.active_gui
 
             img_format = _cam_class.save_img_format_sel.get()
-            save_folder = create_save_folder()
+            save_folder = create_save_folder(folder_dir = self.__save_dir)
 
             frame_index = 1
             pdf_img_list = []
@@ -1835,7 +1718,7 @@ class Hikvision_Operation():
             if len(self.sq_frame_save_list) > 0:
                 time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
                 # time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\SQ-Frames--' + time_id, duplicate = True)
+                sub_folder = create_save_folder(save_folder + '\\SQ-Frames--' + time_id, duplicate = True)
 
                 for images in self.sq_frame_save_list:
                     if str(img_format) == '.pdf':
@@ -1872,15 +1755,14 @@ class Hikvision_Operation():
 
         if _cam_class.SQ_auto_save_bool.get() == 1:
             img_format = _cam_class.save_img_format_sel.get()
-            save_folder = create_save_folder()
+            save_folder = create_save_folder(folder_dir = self.__save_dir)
             frame_index = 1
             pdf_img_list = []
 
             if len(self.sq_frame_save_list) > 0:
                 # time_id = str(datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
-                # sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\SQ-Frames--' + time_id, duplicate = True)
                 time_id = str(datetime.now().strftime("%Y-%m-%d"))
-                sub_folder = create_save_folder(os.getcwd() + '\\TMS_Saved_Images\\SQ-Frames-(auto-save)--' + time_id, duplicate = False)
+                sub_folder = create_save_folder(save_folder + '\\SQ-Frames-(auto-save)--' + time_id, duplicate = False)
 
                 for images in self.sq_frame_save_list:
                     if str(img_format) == '.pdf':

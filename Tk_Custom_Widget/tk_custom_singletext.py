@@ -1,6 +1,6 @@
 import tkinter as tk
 
-class CustomText(tk.Text):
+class CustomSingleText(tk.Text):
     def __init__(self, parent, *args, **kwargs):
         try:
             self._textvariable = kwargs.pop("textvariable")
@@ -8,11 +8,16 @@ class CustomText(tk.Text):
             self._textvariable = None
 
         tk.Text.__init__(self, parent, *args, **kwargs)
+        self['height'] = 1
+        self['wrap'] = tk.NONE
+        self['undo'] = True
+        self['autoseparators'] = True
+        self['maxundo'] = -1
 
-        # self.bind("<Return>", self.dummy_bind)
-        # self.bind("<Control-i>", self.dummy_bind)
-        # self.bind("<Tab>", self.focus_next_widget)
-        # self.bind("<Shift-Tab>", self.focus_previous_widget)
+        self.bind("<Return>", self.dummy_bind)
+        self.bind("<Control-i>", self.dummy_bind)
+        self.bind("<Tab>", self.focus_next_widget)
+        self.bind("<Shift-Tab>", self.focus_previous_widget)
 
         # if the variable has data in it, use it to initialize
         # the widget

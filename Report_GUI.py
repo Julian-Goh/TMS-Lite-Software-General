@@ -31,12 +31,18 @@ from openpyxl import load_workbook
 
 from tk_openpyxl import XL_WorkBook, xl_read_worksheet, custom_col_char_dict, xl_col_label_num, set_outer_border, xl_unmerge_cell
 
+from os_create_folder import open_save_folder
+import image_resize
+
 from ScrolledCanvas import ScrolledCanvas
 
 from img_preview_disp import CreatePreviewDisp
 from tool_tip import CreateToolTip
 from Tk_Custom_Widget.tk_custom_combobox import CustomBox
-from Tk_Custom_Widget.tk_custom_text import CustomSingleText
+from Tk_Custom_Widget.tk_custom_singletext import CustomSingleText
+from Tk_Custom_Widget.tk_custom_toplvl import CustomToplvl
+
+from Tk_Custom_Widget.tk_custom_scrolltext import CustomScrollText
 
 def widget_enable(*widgets):
     for widget in widgets:
@@ -103,21 +109,6 @@ def character_limit(tk_str_var, limit):
     if len(tk_str_var.get()) > 0:
         tk_str_var.set(tk_str_var.get()[:limit])
 
-def impil_resize(impil, img_scale = 0, img_width = 0, img_height = 0, pil_filter = Image.BILINEAR):
-    # pil_filter, Image.: NEAREST, BILINEAR, BICUBIC and ANTIALIAS
-    if img_scale !=0:
-        resize_w = round( np.multiply(impil.size[0], img_scale) )
-        resize_h = round( np.multiply(impil.size[1], img_scale) )
-
-        resize_img = impil.resize((resize_w, resize_h), pil_filter)
-        return resize_img
-
-    elif img_scale ==0 and (img_width != 0 and img_height != 0):
-        resize_img = impil.resize((img_width, img_height), pil_filter)
-        return resize_img
-    else:
-        raise AttributeError("Please pass value(s) for 'img_scale' OR ('img_width' and 'img_height'). If 'img_scale' is not given"+ 
-            ", then resize process will use ('img_width' and 'img_height'). Otherwise, 'img_scale' is the defaulted priority.")
 
 def group_print(*args, **kwargs):
     for arg in args:
@@ -138,9 +129,9 @@ class Text_Scroll(tk.Frame):
         tk.Frame.__init__(self, master, **kwargs)
         self.scroll_canvas_class = scroll_canvas_class
 
-        self.frame_w = kwargs['width'] - 15
+        self.frame_w = kwargs['width']
         self.frame_h = kwargs['height']
-        self.resize_event_w = kwargs['width'] - 15 #During init we set this equal to frame_w
+        self.resize_event_w = kwargs['width'] #During init we set this equal to frame_w
         self.resize_event_h = kwargs['height'] #During init we set this equal to frame_h
 
         self.txt_frame = tk.Frame(self, width = self.frame_w, height = self.frame_h)
@@ -150,7 +141,7 @@ class Text_Scroll(tk.Frame):
         self.tk_txt = tk.Text(self.txt_frame, font = 'Helvetica 10', maxundo = -1, wrap = tk.WORD, relief = tk.GROOVE)
         self.tk_scrolly = tk.Scrollbar(self, command= self.tk_txt.yview)
 
-        self.tk_txt.place(relx=0, rely=0, relheight=1, relwidth=1, anchor = 'nw')
+        self.tk_txt.place(relx=0, rely=0, relheight=1, relwidth=1, width = -16, anchor = 'nw')
         self.tk_scrolly.place(relx=1, rely=0, relheight=1, anchor='ne')
 
         self.tk_txt.configure(yscrollcommand= self.tk_scrolly.set)
@@ -166,7 +157,7 @@ class Text_Scroll(tk.Frame):
         # print('self.frame_w, self.frame_h: ', self.frame_w, self.frame_h)
         # print('event.width, event.height: ', event.width, event.height)
         self.resize_event_h = int(event.height)
-        self.resize_event_w = int(event.width) - 16
+        self.resize_event_w = int(event.width)
 
         if self.frame_h <= self.resize_event_h:
             self.txt_frame['height'] = self.resize_event_h
@@ -214,6 +205,9 @@ class Report_GUI(tk.Frame):
         , save_impil = None, close_impil = None
         , up_arrow_icon = None, down_arrow_icon = None
         , refresh_impil = None
+        , text_icon = None
+        , window_icon = None
+        , folder_impil = None
         , **kwargs):
         tk.Frame.__init__(self, master, **kwargs)
         self.master = master
@@ -231,17 +225,29 @@ class Report_GUI(tk.Frame):
         self.toggle_ON_btn_img = toggle_ON_btn_img
         self.toggle_OFF_btn_img = toggle_OFF_btn_img
 
-        save_impil = impil_resize(save_impil, img_width = 20, img_height = 20)
-        close_impil = impil_resize(close_impil, img_width = 20, img_height = 20)
+        self.save_icon = self.close_icon = self.refresh_icon = self.folder_icon = None
 
-        refresh_impil = impil_resize(refresh_impil, img_width = 25, img_height = 25)
+        if isinstance(save_impil, Image.Image) == True:
+            save_impil = image_resize.pil_img_resize(save_impil, img_width = 20, img_height = 20)
+            self.save_icon = ImageTk.PhotoImage(save_impil)
 
-        self.save_icon = ImageTk.PhotoImage(save_impil)
-        self.close_icon = ImageTk.PhotoImage(close_impil)
-        self.refresh_icon = ImageTk.PhotoImage(refresh_impil)
+        if isinstance(close_impil, Image.Image) == True:
+            close_impil = image_resize.pil_img_resize(close_impil, img_width = 20, img_height = 20)
+            self.close_icon = ImageTk.PhotoImage(close_impil)
 
+        if isinstance(refresh_impil, Image.Image) == True:
+            refresh_impil = image_resize.pil_img_resize(refresh_impil, img_width = 25, img_height = 25)
+            self.refresh_icon = ImageTk.PhotoImage(refresh_impil)
+
+        if isinstance(folder_impil, Image.Image) == True:
+            folder_impil = image_resize.pil_img_resize(folder_impil, img_width = 25, img_height = 25)
+            self.folder_icon = ImageTk.PhotoImage(folder_impil)
+            
+
+        self.text_icon = text_icon
         self.up_arrow_icon = up_arrow_icon
         self.down_arrow_icon = down_arrow_icon
+        self.window_icon = window_icon
 
         self.thread_handle = None
         self.thread_event = threading.Event() #During Report Generation/Update, we can use this event flag to track the process & interrupt specific Tk Event(s).
@@ -259,13 +265,17 @@ class Report_GUI(tk.Frame):
         self.btn_blink_handle = None
         self.__btn_blink_state = False
 
+        self.__curr_imtext_popout = None
+
 
         self.__edit_bool = False #To trace whether or not any data is being editted
-        self.__curr_im_dir = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\TMS_Saved_Images"
-        self.__curr_report_dir = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\TMS_Saved_Reports"
+        # self.__im_curr_dir = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\TMS_Saved_Images"
+        # self.__report_curr_dir = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\TMS_Saved_Reports"
+        
+        self.__im_curr_dir = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images")
+        self.__report_curr_dir = os.path.join(os.environ['USERPROFILE'], "TMS_Saved_Reports")
 
         self.xl_class = XL_WorkBook()
-        self.row_measure_dict = None
         self.xl_worksheet_name = 'Sheet'
         self.xl_load_bool = False
         self.xl_load_path = None
@@ -278,7 +288,7 @@ class Report_GUI(tk.Frame):
             tuple_data[2]: size of edit boolean array; must be an integer type data which is > 0, this array is used to check edit status for each sub-categories
             tuple_data[3]: edit data arr/list; must be an numpy-array type or list type data """
 
-        edit_subcategory_list = [("Sample Detail", 0, 1, self.create_ref_edit_arr(1))
+        edit_subcategory_list = [("Sample Detail", 0, 2, self.create_ref_edit_arr(2))
         , ("Sample Image", 0, 1, []), ("Lighting Drawing", 1, 1, [])
         , ("Testing Criteria", 2, 6, self.create_ref_edit_arr(6)), ("Lighting Details", 3, 4, self.create_ref_edit_arr(4))
         , ("Controller Details", 4, 4, self.create_ref_edit_arr(4)), ("Camera Details", 5, 10, self.create_ref_edit_arr(10))
@@ -292,6 +302,16 @@ class Report_GUI(tk.Frame):
 
         self.track_edit_bool_arr = np.zeros((int(len(self.edit_data_dict) - 1),), dtype = bool) #We Minus 1 because 'Sample Detail' & 'Sample Image' shares the same tracker id
         # print(self.track_edit_bool_arr)
+        self.loading_display = tk.Frame(self, bg = 'SystemButtonFace') #'SystemButtonFace' # 'DodgerBlue2'
+        self.loading_tk_var = tk.StringVar()
+        loading_tk_lb = tk.Label(self.loading_display, textvariable = self.loading_tk_var, bg = 'SystemButtonFace', font = 'Helvetica 16')
+        loading_tk_lb.place(relx = 0.5, rely = 0.5, anchor = 'c')
+
+        self.loading_tk_var.set('Processing')
+        self.loading_display.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+        self.loading_display.place_forget()
+        # self.loading_display.lower() ## opposite of .lower() is .lift()
+        self.__loading_handle = None
 
         self.report_detail_panel()
         self.report_ctrl_panel()
@@ -374,7 +394,6 @@ class Report_GUI(tk.Frame):
         ## CHECK IMAGE UPLOAD TO SEE IF IT IS EDITTED/CHANGED
         #it has to be in order
         ref_list = self.edit_data_dict[edit_dict_key][2]
-        # print(ref_list, img_data)
 
         if type(ref_list) == list:
             if type(img_data) == dict or (isinstance(img_data, OrderedDict) == True):
@@ -411,31 +430,50 @@ class Report_GUI(tk.Frame):
         if tk_event.keysym == 'Left' or tk_event.keysym == 'Right' or tk_event.keysym == 'Up' or tk_event.keysym == 'Down' or tk_event.keysym == 'Tab':
             pass
         else:
-            ref_data = self.edit_data_dict[edit_dict_key][2][ref_arr_index]
-            if ref_data is not None:
-                if tk_var.get() != ref_data:
-                    if edit_dict_key is not None and type(edit_dict_key) == str:
+            if edit_dict_key in self.edit_data_dict:
+                ref_data = self.edit_data_dict[edit_dict_key][2][ref_arr_index]
+                if ref_data is not None:
+                    if tk_var.get() != ref_data:
                         self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
 
-                elif tk_var.get() == ref_data:
-                    if edit_dict_key is not None and type(edit_dict_key) == str:
-                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
-            else:
-                if tk_var.get() == '':
-                    if edit_dict_key is not None and type(edit_dict_key) == str:
+                    elif tk_var.get() == ref_data:
                         self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
                 else:
-                    if edit_dict_key is not None and type(edit_dict_key) == str:
+                    if tk_var.get() == '':
+                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
+                    else:
                         self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
 
+                id_num = self.edit_data_dict[edit_dict_key][0]
+                self.track_edit_bool_arr[id_num] = np.any(self.edit_data_dict[edit_dict_key][1])
+                # print(self.track_edit_bool_arr, np.any(self.track_edit_bool_arr))
+                # print('check_entry_edit: ', self.track_edit_bool_arr)
+
+            self.__edit_bool = np.any(self.track_edit_bool_arr)
+
+            # group_print(__edit_bool = self.__edit_bool)
+
+    def check_combobox_edit(self, tk_event, ref_arr_index, tk_custombox, edit_dict_key = None):
         if edit_dict_key in self.edit_data_dict:
+            ref_data = self.edit_data_dict[edit_dict_key][2][ref_arr_index]
+            # print(self.edit_data_dict[edit_dict_key][2])
+            if ref_data is not None:
+                if tk_custombox.get() != ref_data:
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
+
+                elif tk_custombox.get() == ref_data:
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
+            else:
+                if tk_custombox.get() == '':
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
+                else:
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
+
             id_num = self.edit_data_dict[edit_dict_key][0]
             self.track_edit_bool_arr[id_num] = np.any(self.edit_data_dict[edit_dict_key][1])
-            # print(self.track_edit_bool_arr, np.any(self.track_edit_bool_arr))
-        # print('check_entry_edit: ', self.track_edit_bool_arr)
+
         self.__edit_bool = np.any(self.track_edit_bool_arr)
 
-        # group_print(__edit_bool = self.__edit_bool)
 
     def report_mode_btn_state(self, active_button, inactive_button1 = None):
         orig_colour_bg = 'snow2'
@@ -492,8 +530,6 @@ class Report_GUI(tk.Frame):
         self.ctrl_tk_frame1 = tk.Frame(self, bg = 'DodgerBlue2') #'SystemButtonFace'
         tk.Label(self.ctrl_tk_frame1, text = 'Report Detail:', font = 'Helvetica 14 bold', fg = "white", bg = 'DodgerBlue2').place(x=5, y = 2)
 
-        # self.reload_worksheet_btn = tk.Button(self.ctrl_tk_frame1, relief = tk.GROOVE, text = 'Reload Worksheet', font = 'Helvetica 12'
-        #     , activebackground = 'DarkSlateGray1')
         self.reload_worksheet_btn = tk.Button(self.ctrl_tk_frame1, relief = tk.GROOVE, image = self.refresh_icon
             , activebackground = 'DarkSlateGray1')
 
@@ -504,27 +540,30 @@ class Report_GUI(tk.Frame):
         widget_disable(self.reload_worksheet_btn)
         self.reload_worksheet_btn['command'] = self.reload_worksheet_data
 
-        # self.ctrl_tk_frame1.place(x=0, y = 35, relx = 0, rely = 0, relheight = 1, relwidth = 1, width = -(300 +150) - 80, height = -35 -15, anchor = 'nw')
         self.ctrl_tk_frame1.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
 
         self.ctrl_scroll_class = ScrolledCanvas(self.ctrl_tk_frame1, frame_w = 470, frame_h = 2000, canvas_x = 0, canvas_y = 35, window_bg = 'DodgerBlue2', canvas_highlightthickness = 0)
         self.ctrl_scroll_class.rmb_all_func()
-        self.ctrl_scroll_curr_h = self.ctrl_scroll_class.frame_h
 
         parent = self.ctrl_scroll_class.window_fr
 
-        sub_parent_y = 0
+        ctrl_parent_y = 0
 
         #1. Photo Sample
         self.photo_sample_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         self.photo_sample_parent['height'] = 230
-        self.photo_sample_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.photo_sample_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+
+        sub_parent_y = 0
 
         self.photo_sample_tk_lb = tk.Label(self.photo_sample_parent, text = '1. Photo Sample', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.photo_sample_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
-        self.photo_dim_tk_lb = tk.Label(self.photo_sample_parent, text = 'a) Dimension:', font = 'Helvetica 12', bg = 'SystemButtonFace')
-        self.photo_dim_tk_lb.place(x=10, y=30, relx=0, rely=0, anchor = 'nw')
+        self.photo_sample_tk_lb.update_idletasks()
+        sub_parent_y = sub_parent_y + self.photo_sample_tk_lb.winfo_height() + 5
+
+        self.photo_dim_tk_lb = tk.Label(self.photo_sample_parent, text = 'Dimension(mm):', font = 'Helvetica 12', bg = 'SystemButtonFace')
+        self.photo_dim_tk_lb.place(x=10, y=sub_parent_y, relx=0, rely=0, anchor = 'nw')
         self.photo_dim_var = tk.StringVar()
         self.photo_dim_entry = CustomSingleText(self.photo_sample_parent, relief = tk.GROOVE, font  = 'Helvetica 12'
             , highlightbackground="black", highlightthickness=1, width = 20, height = 1, wrap = tk.NONE, undo = True
@@ -533,19 +572,40 @@ class Report_GUI(tk.Frame):
         self.photo_dim_entry.bind("<KeyRelease>", partial(self.check_entry_edit, ref_arr_index = 0, tk_var = self.photo_dim_var
             , edit_dict_key = "Sample Detail"))
 
-        self.photo_dim_entry.place(x=120, y=30, relx = 0, rely = 0, anchor = 'nw')
+        self.photo_dim_tk_lb.update_idletasks()
+        self.photo_dim_entry.place(x= self.photo_dim_tk_lb.winfo_width() + 15, y = sub_parent_y, relx = 0, rely = 0, anchor = 'nw')
 
+        sub_parent_y = sub_parent_y + self.photo_dim_tk_lb.winfo_height() + 5
+
+        self.photo_bg_tk_lb = tk.Label(self.photo_sample_parent, text = 'Background:', font = 'Helvetica 12', bg = 'SystemButtonFace')
+        self.photo_bg_tk_lb.place(x=10, y = sub_parent_y, relx=0, rely=0, anchor = 'nw')
+
+        self.photo_bg_tk_lb.update_idletasks()
+
+        self.photo_bg_combobox = CustomBox(self.photo_sample_parent, width=20, state='readonly', font = 'Helvetica 12')
+        self.photo_bg_list = ['', 'White', 'Black']
+        self.photo_bg_combobox['value'] = self.photo_bg_list
+        self.photo_bg_combobox.bind("<<ComboboxSelected>>", partial(self.check_combobox_edit, ref_arr_index = 1, tk_custombox = self.photo_bg_combobox
+            , edit_dict_key = "Sample Detail"))
+
+        #lambda event: self.worksheet_name_select(event))
+        # self.photo_bg_combobox.current(0)
+        self.photo_bg_combobox.place(x= self.photo_bg_tk_lb.winfo_width() + 15, y = sub_parent_y, relx = 0, rely = 0, anchor = 'nw')
+
+        sub_parent_y = sub_parent_y + self.photo_bg_tk_lb.winfo_height() + 5 + 10
+
+        self.photo_sample_entry_list = list((self.photo_dim_entry, self.photo_bg_combobox))
 
         self.photo_upload_btn = tk.Button(self.photo_sample_parent, relief = tk.GROOVE, text = 'Upload', font = 'Helvetica 12'
             , activebackground = 'DarkSlateGray1')
 
-        self.photo_upload_btn.place(x=50, y=60, relx=0, rely=0, anchor = 'nw')
+        self.photo_upload_btn.place(x=50, y=sub_parent_y, relx=0, rely=0, anchor = 'nw')
 
         self.photo_upload_tk_fr = tk.Frame(self.photo_sample_parent, bg = 'SystemButtonFace')
         # self.photo_upload_tk_fr['width'] = 300
         self.photo_upload_tk_fr['height'] = 150+15
         # self.photo_upload_tk_fr.place(x=120, y = 55, relx = 0, rely = 0, anchor = 'nw')
-        self.photo_upload_tk_fr.place(x=120, y = 60, relx = 0, rely = 0, relwidth = 1, width = -170, anchor = 'nw')
+        self.photo_upload_tk_fr.place(x=120, y = sub_parent_y, relx = 0, rely = 0, relwidth = 1, width = -170, anchor = 'nw')
 
         self.photo_upload_log_dict = OrderedDict() #{}
         self.photo_upload_img_dict = OrderedDict()
@@ -564,14 +624,18 @@ class Report_GUI(tk.Frame):
         self.photo_upload_btn['command'] = lambda : self.upload_btn_callback(self.photo_upload_log, self.photo_upload_log_dict, self.photo_upload_img_dict
                 , self.photo_upload_log_class, self.photo_upload_col_tracker
                 , edit_dict_key = "Sample Image"
-                , root_path = self.__curr_im_dir)
+                , root_path = self.__im_curr_dir)
 
-        sub_parent_y = sub_parent_y + self.photo_sample_parent['height'] + 5
+        sub_parent_y = sub_parent_y + self.photo_upload_tk_fr['height'] + 5
+
+        self.photo_sample_parent['height'] = sub_parent_y
+
+        ctrl_parent_y = ctrl_parent_y + self.photo_sample_parent['height'] + 5
         ##########################################################################################################################################################################################
         self.light_setup_parent = tk.Frame(parent, bg = 'SystemButtonFace')
 
         self.light_setup_parent['height'] = 200
-        self.light_setup_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.light_setup_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.light_setup_tk_lb = tk.Label(self.light_setup_parent, text = '2. Lighting Drawing', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.light_setup_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -601,12 +665,12 @@ class Report_GUI(tk.Frame):
                 , root_path = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + '\\report src'
                 , track_dir_bool = False)
 
-        sub_parent_y = sub_parent_y + self.light_setup_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.light_setup_parent['height'] + 5
         ##########################################################################################################################################################################################
         self.test_criteria_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         # self.test_criteria_parent['height'] = 210
         # self.test_criteria_parent.place(x=0, y=225 + 105, relx=0, rely=0, relwidth = 1, anchor = 'nw')
-        self.test_criteria_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.test_criteria_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.test_criteria_tk_lb = tk.Label(self.test_criteria_parent, text = '3. Testing Criteria', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.test_criteria_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -643,11 +707,11 @@ class Report_GUI(tk.Frame):
 
         del lb_name_list, tk_lb_list, tk_entry_list
 
-        sub_parent_y = sub_parent_y + self.test_criteria_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.test_criteria_parent['height'] + 5
         ##########################################################################################################################################################################################
         self.light_detail_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         # self.light_detail_parent['height'] = 210
-        self.light_detail_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.light_detail_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.light_detail_tk_lb = tk.Label(self.light_detail_parent, text = '4. Lighting Details', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.light_detail_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -674,11 +738,11 @@ class Report_GUI(tk.Frame):
 
         del lb_name_list, tk_lb_list, tk_entry_list
 
-        sub_parent_y = sub_parent_y + self.light_detail_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.light_detail_parent['height'] + 5
         ##########################################################################################################################################################################################
         self.ctrl_detail_parent = tk.Frame(parent, bg = 'SystemButtonFace')
 
-        self.ctrl_detail_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.ctrl_detail_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.ctrl_detail_tk_lb = tk.Label(self.ctrl_detail_parent, text = '5. Controller Details', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.ctrl_detail_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -705,12 +769,12 @@ class Report_GUI(tk.Frame):
 
         del lb_name_list, tk_lb_list, tk_entry_list
 
-        sub_parent_y = sub_parent_y + self.ctrl_detail_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.ctrl_detail_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.cam_detail_parent = tk.Frame(parent, bg = 'SystemButtonFace')
 
-        self.cam_detail_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.cam_detail_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.cam_detail_tk_lb = tk.Label(self.cam_detail_parent, text = '6. Camera Details', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.cam_detail_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -760,12 +824,12 @@ class Report_GUI(tk.Frame):
 
         del lb_name_list, tk_lb_list, tk_entry_list
 
-        sub_parent_y = sub_parent_y + self.cam_detail_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.cam_detail_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.lens_detail_parent = tk.Frame(parent, bg = 'SystemButtonFace')
 
-        self.lens_detail_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.lens_detail_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
         self.lens_detail_tk_lb = tk.Label(self.lens_detail_parent, text = '7. Lens Details', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.lens_detail_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
 
@@ -800,12 +864,12 @@ class Report_GUI(tk.Frame):
 
         del lb_name_list, tk_lb_list, tk_entry_list
 
-        sub_parent_y = sub_parent_y + self.lens_detail_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.lens_detail_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.target_sample_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         self.target_sample_parent['height'] = 200
-        self.target_sample_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.target_sample_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
 
         self.target_sample_tk_lb = tk.Label(self.target_sample_parent, text = '8. Targeted Image', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.target_sample_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
@@ -836,14 +900,14 @@ class Report_GUI(tk.Frame):
         self.target_upload_btn['command'] = lambda : self.upload_btn_callback(self.target_upload_log, self.target_upload_log_dict, self.target_upload_img_dict
                 , self.target_upload_log_class, self.target_upload_col_tracker
                 , edit_dict_key = "Target Image"
-                , root_path = self.__curr_im_dir)
+                , root_path = self.__im_curr_dir)
 
-        sub_parent_y = sub_parent_y + self.target_sample_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.target_sample_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.gray_sample_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         self.gray_sample_parent['height'] = 200
-        self.gray_sample_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.gray_sample_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
 
         self.gray_sample_tk_lb = tk.Label(self.gray_sample_parent, text = '9. Grayscale Image', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.gray_sample_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
@@ -874,14 +938,14 @@ class Report_GUI(tk.Frame):
         self.gray_upload_btn['command'] = lambda : self.upload_btn_callback(self.gray_upload_log, self.gray_upload_log_dict, self.gray_upload_img_dict
                 , self.gray_upload_log_class, self.gray_upload_col_tracker
                 , edit_dict_key = "Grayscale Image"
-                , root_path = self.__curr_im_dir)
+                , root_path = self.__im_curr_dir)
 
-        sub_parent_y = sub_parent_y + self.gray_sample_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.gray_sample_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.binary_sample_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         self.binary_sample_parent['height'] = 200
-        self.binary_sample_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.binary_sample_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
 
         self.binary_sample_tk_lb = tk.Label(self.binary_sample_parent, text = '10. Binary Image', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.binary_sample_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
@@ -899,6 +963,7 @@ class Report_GUI(tk.Frame):
 
         self.binary_upload_log_dict = OrderedDict() #{}
         self.binary_upload_img_dict = OrderedDict() #{}
+        self.binary_upload_imgtxt_dict = {}
 
         self.binary_upload_col_tracker = [] 
         #To check track the column length (which row has the longest length) to implement adaptive upload log window size.
@@ -912,14 +977,14 @@ class Report_GUI(tk.Frame):
         self.binary_upload_btn['command'] = lambda : self.upload_btn_callback(self.binary_upload_log, self.binary_upload_log_dict, self.binary_upload_img_dict
                 , self.binary_upload_log_class, self.binary_upload_col_tracker
                 , edit_dict_key = "Binary Image"
-                , root_path = self.__curr_im_dir)
+                , root_path = self.__im_curr_dir)
 
-        sub_parent_y = sub_parent_y + self.binary_sample_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.binary_sample_parent['height'] + 5
 
         ##########################################################################################################################################################################################
         self.setup_sample_parent = tk.Frame(parent, bg = 'SystemButtonFace')
         self.setup_sample_parent['height'] = 200
-        self.setup_sample_parent.place(x=0, y=sub_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
+        self.setup_sample_parent.place(x=0, y=ctrl_parent_y, relx=0, rely=0, relwidth = 1, anchor = 'nw')
 
         self.setup_sample_tk_lb = tk.Label(self.setup_sample_parent, text = '11. Setup Image', font = 'Helvetica 13', bg = 'SystemButtonFace')
         self.setup_sample_tk_lb.place(x=0, y=0, relx=0, rely=0, anchor = 'nw')
@@ -948,13 +1013,11 @@ class Report_GUI(tk.Frame):
         self.setup_upload_btn['command'] = lambda : self.upload_btn_callback(self.setup_upload_log, self.setup_upload_log_dict, self.setup_upload_img_dict
                 , self.setup_upload_log_class, self.setup_upload_col_tracker
                 , edit_dict_key = "Setup Image"
-                , root_path = self.__curr_im_dir)
+                , root_path = self.__im_curr_dir)
 
-        sub_parent_y = sub_parent_y + self.setup_sample_parent['height'] + 5
+        ctrl_parent_y = ctrl_parent_y + self.setup_sample_parent['height'] + 5
         
-        self.ctrl_scroll_class.resize_frame(height = sub_parent_y + 15 + 10)
-        self.ctrl_scroll_curr_h = self.ctrl_scroll_class.frame_h
-        # print(self.ctrl_scroll_curr_h)
+        self.ctrl_scroll_class.resize_frame(height = ctrl_parent_y + 10)
 
 
     def entry_and_lb_gen(self, parent, lb_name_list = [], start_x = 0, start_y = 0, lb_bg = 'SystemButtonFace', edit_dict_key = None):
@@ -1054,6 +1117,14 @@ class Report_GUI(tk.Frame):
         self.load_report_btn['command'] = self.load_existing_report
         self.load_report_btn.place(x=130, y = 35)
         # self.load_report_btn.place(relx=0, rely = 1, x= 130, y = -180, anchor = 'sw')
+
+        self.folder_dir_btn = tk.Button(parent1, relief = tk.FLAT)#, relief = tk.GROOVE)#, width = 2, height = 1)
+        self.folder_dir_btn['bg'] = 'gold'
+        self.folder_dir_btn['command'] = partial(open_save_folder, folder_path = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Reports"), create_bool = True)
+        self.folder_dir_btn['image'] = self.folder_icon
+        CreateToolTip(self.folder_dir_btn, 'Open Save Folder'
+            , 32, -5, font = 'Tahoma 11')
+        self.folder_dir_btn.place(x=250, y = 35)
 
 
         self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
@@ -1182,6 +1253,7 @@ class Report_GUI(tk.Frame):
 
     def clear_all_report_detail(self):
         self.photo_dim_entry.set_text('', reset_undo_stack = True)
+        self.photo_bg_combobox.set('')
 
         for tk_widget in self.test_criteria_entry_list:
             tk_widget.set_text('', reset_undo_stack = True)
@@ -1198,57 +1270,169 @@ class Report_GUI(tk.Frame):
         for tk_widget in self.lens_detail_entry_list:
             tk_widget.set_text('', reset_undo_stack = True)
 
+
+    def img_txt_popout_gen(self, parent, imgtxt_dict = None, toplvl_title = 'Toplevel', min_w = None, min_h = None, icon_img = None
+        , topmost_bool = False
+        , *args, **kwargs):
+
+        tk_toplvl = CustomToplvl(parent, toplvl_title = toplvl_title, min_w = min_w, min_h = min_h, icon_img = icon_img
+            , topmost_bool = topmost_bool
+            , *args, **kwargs)
+
+        tk_toplvl.protocol("WM_DELETE_WINDOW", partial(self.img_txt_popout_close, tk_toplvl = tk_toplvl))
+
+        tk_scroll_txt = CustomScrollText(tk_toplvl)
+        tk_scroll_txt.tk_txt['font'] = 'Helvetica 11'
+
+        # tk_scroll_txt.place(x=0, y=50, relx=0, rely=0, relwidth = 1, relheight = 1, height = -50, anchor = 'nw')
+        tk_scroll_txt.place(x=0, y=10, relx=0, rely=0, relwidth = 1, relheight = 1, height = -10, anchor = 'nw')
+        # tk_scroll_txt.tk_str_var.trace("w",  lambda var_name, var_index, operation: self.img_txt_trace(tk_str_var = tk_scroll_txt.tk_str_var))
+
+        # print(isinstance(tk_scroll_txt.tk_str_var, tk.StringVar))
+        return tk_toplvl, tk_scroll_txt.tk_str_var
+
+    def img_txt_trace(self, tk_str_var):
+        # print(tk_str_var.get())
+        pass
+
+    def img_txt_popout_open(self, tk_toplvl):
+        if False == tk_toplvl.check_open():
+            tk_toplvl.open()
+            if self.__curr_imtext_popout != tk_toplvl:
+                self.img_txt_popout_set(tk_toplvl)
+            self.__curr_imtext_popout = tk_toplvl
+
+            screen_width = tk_toplvl.winfo_screenwidth()
+            screen_height = tk_toplvl.winfo_screenheight()
+            x_coordinate = int((screen_width/2) - (tk_toplvl.winfo_width()/2))
+            y_coordinate = int((screen_height/2) - (tk_toplvl.winfo_height()/2))
+            tk_toplvl.geometry("{}x{}+{}+{}".format(tk_toplvl.winfo_width(), tk_toplvl.winfo_height(), x_coordinate, y_coordinate))
+        else:
+            tk_toplvl.show()
+            if self.__curr_imtext_popout != tk_toplvl:
+                self.img_txt_popout_set(tk_toplvl)
+            self.__curr_imtext_popout = tk_toplvl
+
+    def img_txt_popout_close(self, tk_toplvl):
+        tk_toplvl.close()
+
+    def img_txt_popout_close_all(self):
+        log_dict_list = [self.photo_upload_log_dict, self.light_setup_log_dict
+                        , self.target_upload_log_dict, self.gray_upload_log_dict
+                        , self.binary_upload_log_dict, self.setup_upload_log_dict]
+        for log_dict in log_dict_list:
+            for widget_list in log_dict.values():
+                if len(widget_list) > 7:
+                    if isinstance(widget_list[6], CustomToplvl):
+                        widget_list[6].close()
+
+        del log_dict_list
+
+    def img_txt_popout_set(self, tk_toplvl):
+        ### When we open 1 img_text_popout, the other existing popout must close...
+        # print("Closing other imtext popout...")
+        log_dict_list = [self.photo_upload_log_dict, self.light_setup_log_dict
+                        , self.target_upload_log_dict, self.gray_upload_log_dict
+                        , self.binary_upload_log_dict, self.setup_upload_log_dict]
+
+        for log_dict in log_dict_list:
+            for widget_list in log_dict.values():
+                if len(widget_list) > 7:
+                    if isinstance(widget_list[6], CustomToplvl) and widget_list[6] != tk_toplvl:
+                        widget_list[6].close()
+
+        del log_dict_list
+
+
     def upload_log_callback(self, parent, log_dict, img_dict, img_file = None, scroll_class = None, col_tracker_list = None, event = None
         , update_only = False, edit_dict_key = None):
         i = len(log_dict)
 
         widget_list = []
         place_y = int(5 + np.multiply(30, int(i)))
-        col_length = int(0)
+        col_width = int(0)
         ##############################################################################################
 
         save_tk_btn = tk.Button(parent, relief = tk.GROOVE, image = self.save_icon)#, width = 2, height = 1)
-        save_tk_btn.place(x=col_length + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+        save_tk_btn.place(x=col_width + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
         widget_list.append(save_tk_btn)
 
         save_tk_btn.update_idletasks()
-        col_length = col_length + int(2 + save_tk_btn.winfo_width())
+        col_width = col_width + int(2 + save_tk_btn.winfo_width())
         ##############################################################################################
 
         img_lbl_str = 'Image ' + str(i + 1)
 
         img_tk_lbl = tk.Label(parent, text = img_lbl_str, bg = 'white', font = 'Helvetica 11')
 
-        img_tk_lbl.place(x=col_length + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
+        img_tk_lbl.place(x=col_width + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
         widget_list.append(img_tk_lbl)
 
         img_tk_lbl.update_idletasks()
-        col_length = col_length +  int(7 + img_tk_lbl.winfo_width())
+        col_width = col_width +  int(7 + img_tk_lbl.winfo_width())
         ##############################################################################################
 
         remove_tk_btn = tk.Button(parent, relief = tk.GROOVE, image = self.close_icon)#, width = 2, height = 1, bg = 'red')
         
-        remove_tk_btn.place(x= col_length + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+        remove_tk_btn.place(x= col_width + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
         widget_list.append(remove_tk_btn)
 
         remove_tk_btn.update_idletasks()
-        col_length = col_length +  int(7 + remove_tk_btn.winfo_width())
+        col_width = col_width +  int(7 + remove_tk_btn.winfo_width())
         ##############################################################################################
 
         up_tk_btn = tk.Button(parent, relief = tk.GROOVE, image = self.up_arrow_icon)#, width = 2, height = 1)
-        up_tk_btn.place(x=col_length + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+        up_tk_btn.place(x=col_width + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
         widget_list.append(up_tk_btn)
 
         up_tk_btn.update_idletasks()
-        col_length = col_length +  int(7 + up_tk_btn.winfo_width())
+        col_width = col_width +  int(7 + up_tk_btn.winfo_width())
         ##############################################################################################
 
         down_tk_btn = tk.Button(parent, relief = tk.GROOVE, image = self.down_arrow_icon)#, width = 2, height = 1)
-        down_tk_btn.place(x=col_length + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+        down_tk_btn.place(x=col_width + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
         widget_list.append(down_tk_btn)
 
         down_tk_btn.update_idletasks()
-        col_length = col_length +  int(7 + down_tk_btn.winfo_width())
+
+        col_width = col_width +  int(7 + down_tk_btn.winfo_width())
+        ##############################################################################################
+
+        txt_tk_btn = tk.Button(parent, relief = tk.GROOVE, image = self.text_icon)#, width = 2, height = 1)
+        txt_tk_btn['bg'] = 'DodgerBlue2'
+        txt_tk_btn['activebackground'] = 'navy'
+        txt_tk_btn.place(x=col_width + 7,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+        widget_list.append(txt_tk_btn)
+
+        txt_tk_btn.update_idletasks()
+        col_width = col_width +  int(7 + txt_tk_btn.winfo_width())
+
+        tk_toplvl, tk_txt_var = self.img_txt_popout_gen(parent, toplvl_title = 'Image {} Description'.format(i + 1), min_w = 300, min_h = 225, topmost_bool = True
+            , width = 300, height = 225)
+        tk_toplvl.resizable(0,0)
+
+        # tk_toplvl, tk_txt_var = self.img_txt_popout_gen(parent, toplvl_title = 'Image {} Text'.format(i + 1), min_w = 300, min_h = 225, topmost_bool = True
+        #     , width = 300, height = 225)
+        
+        tk_toplvl, tk_txt_var = self.img_txt_popout_gen(parent, toplvl_title = '{} {} Text'.format(edit_dict_key, i + 1), min_w = 300, min_h = 225, topmost_bool = True
+            , width = 300, height = 225, icon_img = self.window_icon)
+
+        tk_toplvl.resizable(0,0)
+
+        if edit_dict_key == 'Grayscale Image':
+            if i == 0:
+                tk_txt_var.set('Original Image')
+            elif i == 1:
+                tk_txt_var.set('Red Channel Image')
+            elif i == 2:
+                tk_txt_var.set('Green Channel Image')
+            elif i == 3:
+                tk_txt_var.set('Blue Channel Image')
+
+        widget_list.append(tk_toplvl)
+        widget_list.append(tk_txt_var)
+
+        ### widget_list index; 0: save_tk_btn, 1: img_tk_lbl, 2: remove_tk_btn, 3: up_tk_btn, 4: down_tk_btn, 5: txt_tk_btn, 6: tk_toplvl, 7: tk_txt_var
         ##############################################################################################
 
         log_dict[str(i)] = widget_list
@@ -1266,16 +1450,17 @@ class Report_GUI(tk.Frame):
 
         up_tk_btn['command'] =  partial(self.shift_upload_img_order, log_dict, img_dict, str(i), pos_shift = -1, edit_dict_key = edit_dict_key)
         down_tk_btn['command'] = partial(self.shift_upload_img_order, log_dict, img_dict, str(i), pos_shift = 1, edit_dict_key = edit_dict_key)
+        txt_tk_btn['command'] = partial(self.img_txt_popout_open, tk_toplvl)
 
         row_height = int(5 + np.multiply(30, int(i+1)))
 
         if col_tracker_list is not None and type(col_tracker_list) == list:
-            col_tracker_list.append(col_length)
+            col_tracker_list.append(col_width)
 
         if scroll_class is not None:
-            # print(col_length, scroll_class.frame_w - 20)
-            if col_length > scroll_class.frame_w - 20: #-20 because of scroll_bar
-                scroll_class.resize_frame(width = max(col_length + 20, 300))
+            # print(col_width, scroll_class.frame_w - 20)
+            if col_width > scroll_class.frame_w - 20: #-20 because of scroll_bar
+                scroll_class.resize_frame(width = max(col_width + 20, 300))
                 # scroll_class.invoke_resize()
 
             if row_height > scroll_class.frame_h - 15:
@@ -1310,29 +1495,33 @@ class Report_GUI(tk.Frame):
                     #### if newpos > currpos, this means we are shifting the target img DOWN-WARD
                     if i >= min(int(newpos), int(currpos)):
                         place_y = int(5 + np.multiply(30, int(i) ))
-                        col_length = int(0)
+                        col_width = int(0)
                         
-                        widget_list[0].place(x= col_length + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                        widget_list[0].place(x= col_width + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                         widget_list[0].update_idletasks()
-                        col_length = col_length + int(2 + widget_list[0].winfo_width())
+                        col_width = col_width + int(2 + widget_list[0].winfo_width())
 
-                        widget_list[1].place(x= col_length + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
+                        widget_list[1].place(x= col_width + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
                         widget_list[1].update_idletasks()
-                        col_length = col_length +  int(7 + widget_list[1].winfo_width())
+                        col_width = col_width +  int(7 + widget_list[1].winfo_width())
 
-                        widget_list[2].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                        widget_list[2].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                         widget_list[2].update_idletasks()
-                        col_length = col_length +  int(7 + widget_list[2].winfo_width())
+                        col_width = col_width +  int(7 + widget_list[2].winfo_width())
 
-                        widget_list[3].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                        widget_list[3].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                         widget_list[3].update_idletasks()
-                        col_length = col_length +  int(7 + widget_list[3].winfo_width())
+                        col_width = col_width +  int(7 + widget_list[3].winfo_width())
 
-                        widget_list[4].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                        widget_list[4].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                         widget_list[4].update_idletasks()
-                        col_length = col_length +  int(7 + widget_list[4].winfo_width())
+                        col_width = col_width +  int(7 + widget_list[4].winfo_width())
 
-                        del col_length
+                        widget_list[5].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                        widget_list[5].update_idletasks()
+                        col_width = col_width +  int(7 + widget_list[5].winfo_width())
+
+                        del col_width
                 i += 1
 
             if edit_dict_key in self.edit_data_dict:
@@ -1367,7 +1556,7 @@ class Report_GUI(tk.Frame):
                     , scroll_class = scroll_class, col_tracker_list = col_tracker_list, edit_dict_key = edit_dict_key)
 
                 if track_dir_bool == True:
-                    self.__curr_im_dir = os.path.join(file, os.pardir)
+                    self.__im_curr_dir = os.path.join(file, os.pardir)
 
                 if edit_dict_key in self.edit_data_dict:
                     self.check_image_edit(edit_dict_key, upload_img_dict)
@@ -1378,7 +1567,7 @@ class Report_GUI(tk.Frame):
                         , scroll_class = scroll_class, col_tracker_list = col_tracker_list, edit_dict_key = edit_dict_key)
 
                 if track_dir_bool == True:
-                    self.__curr_im_dir = os.path.join(imfile, os.pardir)
+                    self.__im_curr_dir = os.path.join(imfile, os.pardir)
 
                 if edit_dict_key in self.edit_data_dict:
                     self.check_image_edit(edit_dict_key, upload_img_dict)
@@ -1389,7 +1578,10 @@ class Report_GUI(tk.Frame):
         # print('dict_id: ', dict_id)
 
         for widget in log_dict[str(dict_id)]:
-            widget.destroy()
+            try:
+                widget.destroy()
+            except(AttributeError, tk.TclError):
+                del widget
 
         log_dict, _ = remove_key(log_dict, dict_id)
         img_dict, key_pos = remove_key(img_dict, dict_id) #key_pos is the position of the element for the removed key
@@ -1404,46 +1596,53 @@ class Report_GUI(tk.Frame):
             # print('tk_id, i, key_pos: ', tk_id, i, key_pos)
             widget_list[0]['command'] = partial(self.save_img_func, img_dict[tk_id])
 
-            update_text = 'Image ' + str(int(tk_id) + 1)
+            update_text = 'Image {}'.format(int(tk_id) + 1)
             widget_list[1]['text'] = update_text
 
             widget_list[2]['command'] = partial(self.remove_upload_log_callback, dict_id=int(tk_id), log_dict=log_dict, img_dict = img_dict, scroll_class = scroll_class
                 , col_tracker_list = col_tracker_list, edit_dict_key = edit_dict_key)
-            
-            widget_list[3]['command'] =  partial(self.shift_upload_img_order, log_dict, img_dict, tk_id, pos_shift = -1, edit_dict_key = edit_dict_key)
-            widget_list[4]['command'] = partial(self.shift_upload_img_order, log_dict, img_dict, tk_id, pos_shift = 1, edit_dict_key = edit_dict_key)
+
+            widget_list[3]['command'] = partial(self.shift_upload_img_order, log_dict, img_dict, tk_id, pos_shift = -1, edit_dict_key = edit_dict_key)
+            widget_list[4]['command'] = partial(self.shift_upload_img_order, log_dict, img_dict, tk_id, pos_shift =  1, edit_dict_key = edit_dict_key)
+
+            # widget_list[6].title('Image {} Description'.format(int(tk_id) + 1))
+            widget_list[6].title('{} {}'.format(edit_dict_key, int(tk_id) + 1))
 
             if i >= key_pos:
                 place_y = int(5 + np.multiply(30, int(i) ))
-                col_length = int(0)
+                col_width = int(0)
 
-                widget_list[0].place(x= col_length + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                widget_list[0].place(x= col_width + 2,y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                 widget_list[0].update_idletasks()
-                col_length = col_length + int(2 + widget_list[0].winfo_width())
+                col_width = col_width + int(2 + widget_list[0].winfo_width())
 
-                widget_list[1].place(x= col_length + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
+                widget_list[1].place(x= col_width + 7, y=place_y, relx=0, rely=0, anchor = 'nw')
                 widget_list[1].update_idletasks()
-                col_length = col_length +  int(7 + widget_list[1].winfo_width())
+                col_width = col_width +  int(7 + widget_list[1].winfo_width())
 
-                widget_list[2].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                widget_list[2].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                 widget_list[2].update_idletasks()
-                col_length = col_length +  int(7 + widget_list[2].winfo_width())
+                col_width = col_width +  int(7 + widget_list[2].winfo_width())
 
-                widget_list[3].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                widget_list[3].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                 widget_list[3].update_idletasks()
-                col_length = col_length +  int(7 + widget_list[3].winfo_width())
+                col_width = col_width +  int(7 + widget_list[3].winfo_width())
 
-                widget_list[4].place(x= col_length + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                widget_list[4].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
                 widget_list[4].update_idletasks()
-                col_length = col_length +  int(7 + widget_list[4].winfo_width())
+                col_width = col_width +  int(7 + widget_list[4].winfo_width())
 
-                del col_length
+                widget_list[5].place(x= col_width + 7, y=place_y - 2, relx=0, rely=0, anchor = 'nw')
+                widget_list[5].update_idletasks()
+                col_width = col_width +  int(7 + widget_list[5].winfo_width())
+
+                del col_width
             i += 1
 
         if len(col_tracker_list) > 0:
-            col_length = max(col_tracker_list)
+            col_width = max(col_tracker_list)
             if scroll_class is not None:
-                scroll_class.resize_frame(width = max(col_length + 20, 300))
+                scroll_class.resize_frame(width = max(col_width + 20, 300))
                 # scroll_class.invoke_resize()
 
         elif len(col_tracker_list) == 0:
@@ -1455,8 +1654,7 @@ class Report_GUI(tk.Frame):
         scroll_class.resize_frame(height = max(row_height + 15, 150))
 
     def save_img_func(self, imdata):
-        # print(os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + '\\TMS_Saved_Images')
-        f = filedialog.asksaveasfile(initialdir = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + '\\TMS_Saved_Images'
+        f = filedialog.asksaveasfile(initialdir = self.__im_curr_dir
             , mode='w', defaultextension = self.img_format_list, filetypes = self.img_format_list)
         if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
             return
@@ -1493,18 +1691,87 @@ class Report_GUI(tk.Frame):
                 Info_Msgbox(message = 'Save Image Success!' + '\n\n' + abs_path, title = 'Image Save'
                     , font = 'Helvetica 10', width = 400)
 
+    def reset_init_state(self):
+        self.xl_load_bool = False
+        self.xl_load_path = None
+
+        self.xl_worksheet_name = 'Sheet'
+        # self.worksheet_name_var.set(self.xl_worksheet_name)
+        self.worksheet_name_entry.set_text(self.xl_worksheet_name, reset_undo_stack = True)
+
+        self.create_worksheet_bool.set(1)
+
+        self.worksheet_name_dropbox['value'] = []
+        self.worksheet_name_dropbox.set('')
+        widget_disable(self.worksheet_name_dropbox, self.rename_worksheet_btn, self.create_worksheet_checkbtn
+            , self.reload_worksheet_btn)
+
+        self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
+        self.curr_worksheet_tk_var.set('Current Worksheet: ' + 'None')
+
+        widget_enable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
+            , self.worksheet_name_entry)
+
+    def new_report_init(self):
+        self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
+        ask_msgbox = Ask_Msgbox(message = "You have selected 'New Report'.\nAny unsaved changes will be cleared!" + "\n\nAre you sure?"
+            , parent = self.master, title = 'New Report', message_anchor = 'w', ask_OK = False, height = 200)
+
+        if ask_msgbox.ask_result() == True:
+            self.xl_load_bool = False
+            self.xl_load_path = None
+            # self.__edit_bool = False
+            widget_disable(self.reload_worksheet_btn)
+
+            self.xl_worksheet_name = 'Sheet'
+            # self.worksheet_name_var.set(self.xl_worksheet_name)
+            self.worksheet_name_entry.set_text(self.xl_worksheet_name, reset_undo_stack = True)
+            self.update_report_btn.place_forget()
+
+            self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207, anchor = 'nw')
+            # self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207 + 5, anchor = 'nw')
+            self.generate_report_btn.place(relx=0, rely = 0, x= 10, y = 207, anchor = 'nw')
+
+            self.create_worksheet_bool.set(1)
+
+            self.worksheet_name_dropbox['value'] = []
+            self.worksheet_name_dropbox.set('')
+
+            widget_disable(self.worksheet_name_dropbox, self.rename_worksheet_btn, self.create_worksheet_checkbtn)
+
+
+            for edit_data in self.edit_data_dict.values():
+                if type(edit_data[2]) == list:
+                    self.clear_ref_edit_list(edit_data[2])
+                elif (isinstance(edit_data[2], np.ndarray)) == True:
+                    self.clear_ref_edit_arr(edit_data[2])
+
+                self.reset_edit_bool_arr(edit_data[1])
+
+            self.clear_all_report_detail()
+            self.clear_all_upload_log()
+
+            self.reset_track_edit_bool_arr()
+
+            self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
+            self.curr_worksheet_tk_var.set('Current Worksheet: ' + 'None')
+
+        else:
+            if self.xl_load_path is not None and self.xl_load_bool == True:
+                self.report_mode_btn_state(self.load_report_btn, self.new_report_btn)
+
 
     def load_existing_report(self):
         self.report_mode_btn_state(self.load_report_btn, self.new_report_btn)
-        file = filedialog.askopenfilename(initialdir = self.__curr_report_dir, parent = self, title="Select file", filetypes = self.report_format_list, multiple = False)
+        file = filedialog.askopenfilename(initialdir = self.__report_curr_dir, parent = self, title="Select file", filetypes = self.report_format_list, multiple = False)
         err_ret = False
 
         if file == '':
-            #print('empty directory')
-            if self.xl_load_bool == False:
-                self.new_report_init()
-            elif self.xl_load_bool == True:
-                pass
+            if self.xl_load_path is not None and self.xl_load_bool == True:
+                self.report_mode_btn_state(self.load_report_btn, self.new_report_btn)
+            else:
+                self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
+            return
         else:
             _file_name = (re.findall(r'[^\\/]+|[\\/]', file))[-1]
             # print(file, _file_name)
@@ -1527,10 +1794,21 @@ class Report_GUI(tk.Frame):
                     self.new_report_init()
 
             elif err_ret == False:
-                self.__curr_report_dir = os.path.join(file, os.pardir)
+                self.__report_curr_dir = os.path.join(file, os.pardir)
                 self.xl_load_path = file
-                self.xl_class.xl_load_workbook(self.xl_load_path)
+                # self.xl_class.xl_update_workbook(self.xl_load_path)
+                self.xl_class.xl_open_workbook(self.xl_load_path)
                 
+                ###########################################################################
+                # Have to Set this Default Width for Some of these Columns....
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'B', 'F')
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'G', 'L')
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'Q', 'V')
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'W', 'AB')
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'AC', 'AH')
+                self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'AI', 'AN')
+                ###########################################################################
+
                 for edit_data in self.edit_data_dict.values():
                     if type(edit_data[2]) == list:
                         self.clear_ref_edit_list(edit_data[2])
@@ -1575,6 +1853,7 @@ class Report_GUI(tk.Frame):
 
                 self.event_log_load_report()
 
+
     def reload_worksheet_data(self):
         if self.__edit_bool == False:
             for edit_data in self.edit_data_dict.values():
@@ -1615,15 +1894,29 @@ class Report_GUI(tk.Frame):
 
     def load_worksheet_data(self):
         read_result = xl_read_worksheet(ws = self.xl_class.worksheet, min_row=3, min_col='B', values_only=True)
-        i = 0
-        for i, read_data in enumerate(read_result):
+        
+        for read_data in read_result:
             if read_data is not None:
                 self.photo_dim_entry.set_text(read_data, reset_undo_stack = True)
             elif read_data is None:
                 self.photo_dim_entry.set_text('', reset_undo_stack = True)
 
-            self.edit_data_dict["Sample Detail"][2][i] = read_data
+            self.edit_data_dict["Sample Detail"][2][0] = read_data
+            break ### read_result from B3 has only 1 result. So, should random error occur (random additional data), we break after 1 iteration as failsafe
 
+
+        read_result = xl_read_worksheet(ws = self.xl_class.worksheet, min_row=4, min_col='B', values_only=True)
+        for read_data in read_result:
+            if read_data in self.photo_bg_list:
+                self.photo_bg_combobox.current(self.photo_bg_list.index(read_data))
+            else:
+                # print("Background Category Empty...")
+                self.photo_bg_combobox.set('')
+
+            self.edit_data_dict["Sample Detail"][2][1] = read_data
+            break ### read_result from B4 has only 1 result. So, should random error occur (random additional data), we break after 1 iteration as failsafe
+        
+        # print(self.edit_data_dict["Sample Detail"][2])
 
         read_result = xl_read_worksheet(ws = self.xl_class.worksheet, min_row=5, max_row=10, min_col='O', values_only=True)
         i = 0
@@ -1674,17 +1967,24 @@ class Report_GUI(tk.Frame):
                 self.lens_detail_entry_list[i].set_text('', reset_undo_stack = True)
 
             self.edit_data_dict["Lens Details"][2][i] = read_data
-
-
     
-    def load_worksheet_image(self):
-        '''self.photo_upload_img_dict, self.light_setup_img_dict, self.target_upload_img_dict, self.gray_upload_img_dict
-        , self.binary_upload_img_dict, self.setup_upload_img_dict'''
+    def retrieve_imtext_data(self, ws, img_obj, cell_id, start_col, end_col):
+
+        _, imtext_cell_id, _ = self.xl_class.compute_next_anchor_img(ws = ws, img_obj = img_obj, cell_id = cell_id
+            , start_col = start_col, end_col = end_col)
+        # print(imtext_cell_id)
         
-        '''print(self.photo_upload_img_dict.keys(), self.light_setup_img_dict.keys(), self.target_upload_img_dict.keys(), self.gray_upload_img_dict.keys()
-        , self.binary_upload_img_dict.keys(), self.setup_upload_img_dict.keys())'''
+        col_char = re.findall('(\\D+)', imtext_cell_id)[0]
+        row_num = int(re.findall('(\\d+)', imtext_cell_id)[0])
 
+        ### We just use row_num to find the image text because reports generated via this software has image spacing of + 1
+        imtext_data = xl_read_worksheet(ws = ws, min_row=row_num, min_col=col_char, values_only=True)
 
+        ### imtext_data is generator-type object from yield()
+
+        return imtext_data
+
+    def load_worksheet_image(self):
         start_id_arr = np.zeros(6, dtype=np.uint8) #Determine the start image id when loading image from worksheet. If current dictionary(ies) is/are empty, we start at id = 0.
         start_id_arr[0] = (0 if len(self.photo_upload_img_dict) == 0 else int(list(self.photo_upload_img_dict.keys())[-1]) + 1)
         start_id_arr[1] = (0 if len(self.light_setup_img_dict) == 0 else int(list(self.light_setup_img_dict.keys())[-1]) + 1)
@@ -1694,36 +1994,57 @@ class Report_GUI(tk.Frame):
         start_id_arr[5] = (0 if len(self.setup_upload_img_dict) == 0 else int(list(self.setup_upload_img_dict.keys())[-1]) + 1)
         # print(start_id_arr)
 
-        xl_imloader = self.xl_class.xl_read_image(ws = self.xl_class.worksheet, sort_bool = True) #will sort according to columns then rows (top-to-bottom)...
-        # print(xl_imloader._images)
-        # print(list(self.photo_upload_img_dict.keys())[-1])
+        xl_imloader = self.xl_class.xl_read_image(ws = self.xl_class.worksheet, sort_col_bool = True) #will sort according to columns then rows (top-to-bottom)...
         
-        for cell_id, im_obj in xl_imloader._images.items():
+        imtext_memory_arr = np.empty((6), dtype=object)
+        for i in range(0, len(imtext_memory_arr)):
+            imtext_memory_arr[i] = []
+
+        ### Extracting image(s) from excel and inserting it into respective img_dictionary(ies)
+        for cell_id, img_obj in xl_imloader._images.items():
             col_char = re.split('(\\d+)',cell_id)[0]
             if col_char == 'A':
-                self.photo_upload_img_dict[str(start_id_arr[0])] = im_obj
+                self.photo_upload_img_dict[str(start_id_arr[0])] = img_obj
                 start_id_arr[0] = start_id_arr[0] + 1
-            elif col_char == 'G':
-                self.light_setup_img_dict[str(start_id_arr[1])] = im_obj
-                start_id_arr[1] = start_id_arr[1] + 1
-            elif col_char == 'Q':
-                self.target_upload_img_dict[str(start_id_arr[2])] = im_obj
-                start_id_arr[2] = start_id_arr[2] + 1
-            elif col_char == 'W':
-                self.gray_upload_img_dict[str(start_id_arr[3])] = im_obj
-                start_id_arr[3] = start_id_arr[3] + 1
-            elif col_char == 'AC':
-                self.binary_upload_img_dict[str(start_id_arr[4])] = im_obj
-                start_id_arr[4] = start_id_arr[4] + 1
-            elif col_char == 'AI':
-                self.setup_upload_img_dict[str(start_id_arr[5])] = im_obj
-                start_id_arr[5] = start_id_arr[5] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'A', end_col = 'F')
+                imtext_memory_arr[0].append(imtext_data)
 
-            del im_obj
+            elif col_char == 'G':
+                self.light_setup_img_dict[str(start_id_arr[1])] = img_obj
+                start_id_arr[1] = start_id_arr[1] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'G', end_col = 'L')
+                imtext_memory_arr[1].append(imtext_data)
+
+            elif col_char == 'Q':
+                self.target_upload_img_dict[str(start_id_arr[2])] = img_obj
+                start_id_arr[2] = start_id_arr[2] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'Q', end_col = 'V')
+                imtext_memory_arr[2].append(imtext_data)
+
+            elif col_char == 'W':
+                self.gray_upload_img_dict[str(start_id_arr[3])] = img_obj
+                start_id_arr[3] = start_id_arr[3] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'W', end_col = 'AB')
+                imtext_memory_arr[3].append(imtext_data)
+
+            elif col_char == 'AC':
+                self.binary_upload_img_dict[str(start_id_arr[4])] = img_obj
+                start_id_arr[4] = start_id_arr[4] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'AC', end_col = 'AH')
+                imtext_memory_arr[4].append(imtext_data)
+
+            elif col_char == 'AI':
+                self.setup_upload_img_dict[str(start_id_arr[5])] = img_obj
+                start_id_arr[5] = start_id_arr[5] + 1
+                imtext_data = self.retrieve_imtext_data(ws = self.xl_class.worksheet, img_obj = img_obj, cell_id = cell_id, start_col = 'AI', end_col = 'AN')
+                imtext_memory_arr[5].append(imtext_data)
+
+            del img_obj
 
         del xl_imloader
         del start_id_arr
 
+        ### Create corresponding widgets in each upload User-Interface base on the amount of image(s) in the image dictionary(ies)
         for _ in range(0, len(self.photo_upload_img_dict)):
             self.upload_log_callback(parent = self.photo_upload_log, log_dict = self.photo_upload_log_dict, img_dict = self.photo_upload_img_dict
                 , scroll_class = self.photo_upload_log_class, col_tracker_list = self.photo_upload_col_tracker, update_only = True, edit_dict_key = "Sample Image")
@@ -1755,6 +2076,7 @@ class Report_GUI(tk.Frame):
         self.edit_data_dict["Binary Image"][2] = list(self.binary_upload_img_dict.values())
         self.edit_data_dict["Setup Image"][2] = list(self.setup_upload_img_dict.values())
         
+
         # group_print(self.edit_data_dict["Sample Image"][2]
         #     , self.edit_data_dict["Lighting Drawing"][2]
         #     , self.edit_data_dict["Target Image"][2]
@@ -1762,87 +2084,28 @@ class Report_GUI(tk.Frame):
         #     , self.edit_data_dict["Binary Image"][2]
         #     , self.edit_data_dict["Setup Image"][2])
 
+        #############################################################################################################################################################
+        ### Load Image Text(s) into each imtext popout GUI(s). We use upload_log_dict to access the tk.StringVar() Tkinter object.
+        self.load_imtext_popout(log_dict = self.photo_upload_log_dict, imtext_memory = imtext_memory_arr[0])
+        self.load_imtext_popout(log_dict = self.light_setup_log_dict,  imtext_memory = imtext_memory_arr[1])
+        self.load_imtext_popout(log_dict = self.target_upload_log_dict,imtext_memory = imtext_memory_arr[2])
+        self.load_imtext_popout(log_dict = self.gray_upload_log_dict,  imtext_memory = imtext_memory_arr[3])
+        self.load_imtext_popout(log_dict = self.binary_upload_log_dict,imtext_memory = imtext_memory_arr[4])
+        self.load_imtext_popout(log_dict = self.setup_upload_log_dict, imtext_memory = imtext_memory_arr[5])
 
-    def reset_init_state(self):
-        self.xl_load_bool = False
-        self.xl_load_path = None
+        del imtext_memory_arr
 
-        self.xl_worksheet_name = 'Sheet'
-        # self.worksheet_name_var.set(self.xl_worksheet_name)
-        self.worksheet_name_entry.set_text(self.xl_worksheet_name, reset_undo_stack = True)
+    def load_imtext_popout(self, log_dict, imtext_memory):
+        for i, widget_list in enumerate(log_dict.values()):
+            if 0 <= i <= len(imtext_memory) - 1:
+                imtext_str = ''
+                for imtext in imtext_memory[i]:
+                    if isinstance(imtext, str) and len(imtext) > 0:
+                        imtext_str = imtext_str + '{} '.format(imtext)
 
-        self.create_worksheet_bool.set(1)
-
-        self.worksheet_name_dropbox['value'] = []
-        self.worksheet_name_dropbox.set('')
-        widget_disable(self.worksheet_name_dropbox, self.rename_worksheet_btn, self.create_worksheet_checkbtn
-            , self.reload_worksheet_btn)
-
-        self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
-        self.curr_worksheet_tk_var.set('Current Worksheet: ' + 'None')
-
-        widget_enable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
-            , self.worksheet_name_entry)
-
-    def new_report_init(self):
-        self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
-        if self.xl_load_path is not None and self.xl_load_bool == True:
-            ask_msgbox = Ask_Msgbox(message = "You will need to load the current file again." + "\n\nAre you sure?"
-            , parent = self.master, title = 'New Report', message_anchor = 'w')
-
-            if ask_msgbox.ask_result() == True:
-                self.xl_load_bool = False
-                self.xl_load_path = None
-                # self.__edit_bool = False
-                widget_disable(self.reload_worksheet_btn)
-
-                self.xl_worksheet_name = 'Sheet'
-                # self.worksheet_name_var.set(self.xl_worksheet_name)
-                self.worksheet_name_entry.set_text(self.xl_worksheet_name, reset_undo_stack = True)
-                self.update_report_btn.place_forget()
-
-                self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207, anchor = 'nw')
-                # self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207 + 5, anchor = 'nw')
-                self.generate_report_btn.place(relx=0, rely = 0, x= 10, y = 207, anchor = 'nw')
-
-                self.create_worksheet_bool.set(1)
-
-                self.worksheet_name_dropbox['value'] = []
-                self.worksheet_name_dropbox.set('')
-
-                widget_disable(self.worksheet_name_dropbox, self.rename_worksheet_btn, self.create_worksheet_checkbtn)
-
-
-                for edit_data in self.edit_data_dict.values():
-                    if type(edit_data[2]) == list:
-                        self.clear_ref_edit_list(edit_data[2])
-                    elif (isinstance(edit_data[2], np.ndarray)) == True:
-                        self.clear_ref_edit_arr(edit_data[2])
-
-                    self.reset_edit_bool_arr(edit_data[1])
-
-                self.clear_all_report_detail()
-                self.clear_all_upload_log()
-
-                self.reset_track_edit_bool_arr()
-
-                self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
-                self.curr_worksheet_tk_var.set('Current Worksheet: ' + 'None')
-
-            else:
-                self.report_mode_btn_state(self.load_report_btn, self.new_report_btn)
-
-        elif self.xl_load_path is None and self.xl_load_bool == False:
-            self.xl_load_bool = False
-            self.xl_load_path = None
-
-            self.update_report_btn.place_forget()
-
-            self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207, anchor = 'nw')
-            # self.update_report_checkbtn.place(relx=0, rely = 0, x= 10 + 140, y = 207 + 5, anchor = 'nw')
-            self.generate_report_btn.place(relx=0, rely = 0, x= 10, y = 207, anchor = 'nw')
-
-            self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
+                if len(imtext_str) > 0:
+                    imtext_str = "".join(imtext_str.rstrip())
+            widget_list[7].set(imtext_str)
 
 
     def enable_update_generate_report(self):
@@ -1900,12 +2163,16 @@ class Report_GUI(tk.Frame):
     def thread_generate_report(self):
         if not self.thread_event.isSet():
             # print('self.xl_data: ', self.xl_data)
+            self.img_txt_popout_close_all()
+
             self.thread_handle = threading.Thread(target=self.generate_report_func, daemon = True)
             self.thread_handle.start()
             # self.img_arr = None
 
     def thread_update_report(self):
         if not self.thread_event.isSet():
+            self.img_txt_popout_close_all()
+
             self.thread_handle = threading.Thread(target=self.update_report_func, daemon = True)
             self.thread_handle.start()
             # self.img_arr = None
@@ -2065,50 +2332,38 @@ class Report_GUI(tk.Frame):
 
         return data_list
 
-    def generate_report_func(self):
-        # print('xl_data: ', xl_data)
-        self.thread_event.set()
-        
+    def insert_imtext_data(self, imtext_cell_list, log_dict, merge_end_cell_id):
+        ''' log_dict: upload log dict which has the list of all the tk_widget(s) from upload callback. tk_widget_list[7] is the tk.StringVar()
+            imtext_cell_list: the list acquired from xl_class.cell_insert_data(). the list contain the cell id locations where imtext can be inserted.
+            merge_end_cell_id: when we insert imtext, we must merge all the column(s) where the imtext resides. so, we provide the end column id for merge process.
+        '''
+        if type(imtext_cell_list) == list and len(imtext_cell_list) > 0:
+            imtext_data_list = []
+
+            for tk_widget_list in log_dict.values():
+                imtext_data_list.append(tk_widget_list[7].get())
+
+            text_cell_id_list = imtext_cell_list
+            for i in range(0, min(len(imtext_data_list), len(text_cell_id_list)) ):
+                merge_cell_id = "{}:{}{}".format(text_cell_id_list[i], merge_end_cell_id, int(re.findall('(\\d+)', text_cell_id_list[i])[0]))
+                self.xl_class.worksheet.merge_cells(merge_cell_id)
+
+                ### auto_fit_row is True because we want to auto-adjust row height if \n is introduced in the text.
+                ### Furthermore, alignment(wrapText) is also set to True so Excel itself will set a \n line if text is too long.
+                self.xl_class.cell_insert_data(self.xl_class.worksheet, imtext_data_list[i]
+                    , 'string', text_cell_id_list[i], auto_fit_col = False, auto_fit_row = True
+                    , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
+
+
+    def insert_report_data(self):
         event_input_err = False
-        self.err_msgbox_flag_1 = False
 
-        event_error = False
-        self.err_msgbox_flag_2 = False
-
-        event_reset = False
-
-        prev_worksheet_name = None
-
-        self.report_error_msgbox_1()
-        self.report_error_msgbox_2()
-        self.report_info_msgbox()
-
-        widget_disable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
-            , self.worksheet_name_dropbox, self.worksheet_name_entry
-            , self.rename_worksheet_btn, self.create_worksheet_checkbtn
-            , self.reload_worksheet_btn)
-
-        if self.xl_load_path is not None and self.update_report_bool.get() == 1:
-            try:
-                if self.create_worksheet_bool.get() == 0:
-                    row_measure_dict, _ = self.xl_class.xl_load_workbook(self.xl_load_path, sheet_name = self.xl_worksheet_name)
-
-                elif self.create_worksheet_bool.get() == 1:
-                    self.load_worksheet_name()
-                    prev_worksheet_name = copy.copy(self.xl_worksheet_name)
-
-                    row_measure_dict, self.xl_worksheet_name = self.xl_class.xl_load_workbook(self.xl_load_path
-                        , sheet_name = self.xl_worksheet_name, new_ws_bool = True)
-
-            except Exception:
-                self.load_worksheet_name()
-                self.xl_worksheet_name = self.xl_class.xl_new_workbook(self.xl_worksheet_name)
-                row_measure_dict = self.xl_class.init_xl_data_id(init_row_num = 2, init_col_char = 'A')
-        else:
-            self.load_worksheet_name()
-            self.xl_worksheet_name = self.xl_class.xl_new_workbook(self.xl_worksheet_name)
-            row_measure_dict = self.xl_class.init_xl_data_id(init_row_num = 2, init_col_char = 'A')
-
+        photo_sample_data_list = []
+        for tk_widget in self.photo_sample_entry_list:
+            if isinstance(tk_widget, CustomSingleText):
+                photo_sample_data_list = self.insert_data_list(photo_sample_data_list, tk_widget.get_text())
+            elif isinstance(tk_widget, CustomBox):
+                photo_sample_data_list = self.insert_data_list(photo_sample_data_list, tk_widget.get())
 
         test_criteria_data_list = []
         for tk_widget in self.test_criteria_entry_list:
@@ -2132,14 +2387,50 @@ class Report_GUI(tk.Frame):
 
 
         if ('' in test_criteria_data_list) or ('' in cam_detail_data_list) or ('' in lens_detail_data_list):
-            event_input_err = True #True
-        # print(test_criteria_data_list)
-        
+            event_input_err = True # True # False
 
         if event_input_err == False:
-            self.xl_class.cell_insert_data(self.xl_class.worksheet, self.photo_dim_var.get()
-                , 'string', 'B' + str(3) 
-                , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
+            self.xl_class.xl_image_clear_all() ### Clear all the image(s) to re-sort and place the image(s) again
+            ws_max_row = self.xl_class.worksheet.max_row
+            max_row_arr = np.zeros(6, dtype=np.uint8) ### To compute the new max row, to adjust the bottom borders
+            imtext_cell_list_arr = np.empty(6, dtype=object)
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'A', 5, 'F', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'G', 3, 'L', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'Q', 3, 'V', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'W', 3, 'AB', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'AC', 3, 'AH', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            xl_unmerge_cell(self.xl_class.worksheet, 'AI', 3, 'AN', ws_max_row
+                , del_value = True
+                , border_type = 'left-right')
+
+            #### inserting in cell B3, we prevent auto-fit because B3 is a merge-cell (more than enough space). Auto-fitting in B3 will cause problems in image(s) column A-F
+            i = 3
+            for str_data in photo_sample_data_list:
+                self.xl_class.cell_insert_data(self.xl_class.worksheet, str_data
+                    , 'string', 'B' + str(i), auto_fit_col = False, auto_fit_row = False
+                    , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
+                i += 1
+
+            new_max_row, imtext_cell_list_arr[0] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.photo_upload_img_dict, 6, 'A', 'F', check_col_char = 'A', check_row_num = 5
+                , get_text_cell_id = True)
+            max_row_arr[0] = new_max_row
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[0], log_dict = self.photo_upload_log_dict,  merge_end_cell_id = 'F')
 
             i = 5
             for entry_data in test_criteria_data_list:
@@ -2147,7 +2438,7 @@ class Report_GUI(tk.Frame):
                     , 'string', 'O' + str(i) 
                     , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
                 i += 1
-            
+
             i = 22
             for entry_data in cam_detail_data_list:
                 self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
@@ -2169,7 +2460,6 @@ class Report_GUI(tk.Frame):
                     , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
                 i += 1
 
-
             i = 12
             for entry_data in light_detail_data_list:
                 self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
@@ -2179,77 +2469,111 @@ class Report_GUI(tk.Frame):
 
             del i
 
-            self.xl_class.xl_image_clear_all()
-
-            max_row_arr = np.zeros(6, dtype=np.uint8) #To compute the new max row, to adjust the bottom borders
-            imtext_memory_arr = np.empty(6, dtype=object)
-
-            new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.photo_upload_img_dict, 5, 'A', 'F', check_col_char = 'A', check_row_num = 5, row_measure_dict = row_measure_dict)
-            max_row_arr[0] = new_max_row
-
-            new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.light_setup_img_dict, 5, 'G', 'L', check_col_char = 'G', check_row_num = 5, row_measure_dict = row_measure_dict)
+            new_max_row, imtext_cell_list_arr[1] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.light_setup_img_dict, 5, 'G', 'L', check_col_char = 'G', check_row_num = 5
+                , get_text_cell_id = True)
             max_row_arr[1] = new_max_row
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[1], log_dict = self.light_setup_log_dict,   merge_end_cell_id = 'L')
 
-            new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.target_upload_img_dict, 4, 'Q', 'V', check_col_char = 'Q', check_row_num = 4, row_measure_dict = row_measure_dict)
+            new_max_row, imtext_cell_list_arr[2] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.target_upload_img_dict, 4, 'Q', 'V', check_col_char = 'Q', check_row_num = 4
+                , get_text_cell_id = True)
             max_row_arr[2] = new_max_row
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[2], log_dict = self.target_upload_log_dict, merge_end_cell_id = 'V')
 
-            new_max_row, imtext_memory_arr[3] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.gray_upload_img_dict, 4, 'W', 'AB', check_col_char = 'W', check_row_num = 4
-                , row_measure_dict = row_measure_dict, get_text_cell_id = True)
+            new_max_row, imtext_cell_list_arr[3] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.gray_upload_img_dict, 4, 'W', 'AB', check_col_char = 'W', check_row_num = 4
+                , get_text_cell_id = True)
             max_row_arr[3] = new_max_row
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[3], log_dict = self.gray_upload_log_dict,   merge_end_cell_id = 'AB')
 
-            new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.binary_upload_img_dict, 4, 'AC', 'AH', check_col_char = 'AC', check_row_num = 4, row_measure_dict = row_measure_dict)
+            new_max_row, imtext_cell_list_arr[4] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.binary_upload_img_dict, 4, 'AC', 'AH', check_col_char = 'AC', check_row_num = 4
+                , get_text_cell_id = True)
             max_row_arr[4] = new_max_row
-
-            new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.setup_upload_img_dict, 4, 'AI', 'AN', check_col_char = 'AI', check_row_num = 4, row_measure_dict = row_measure_dict)
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[4], log_dict = self.binary_upload_log_dict, merge_end_cell_id = 'AH')
+            
+            new_max_row, imtext_cell_list_arr[5] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.setup_upload_img_dict, 4, 'AI', 'AN', check_col_char = 'AI', check_row_num = 4
+                , get_text_cell_id = True)
             max_row_arr[5] = new_max_row
+            self.insert_imtext_data(imtext_cell_list = imtext_cell_list_arr[5], log_dict = self.setup_upload_log_dict,  merge_end_cell_id = 'AN')
 
-
-            ws_max_row = self.xl_class.worksheet.max_row
+            # print(imtext_cell_list_arr)
             # group_print(ws_max_row, max(max_row_arr))
 
-            ### Temporary Method of Adding Labels to Grayscale Upload Image(s):
-            xl_unmerge_cell(self.xl_class.worksheet, 'W', 3, 'AB', max(ws_max_row, max(max_row_arr))
-                , del_value = True
-                , border_type = 'left-right')
-            # print(imtext_memory_arr)
-            if type(imtext_memory_arr[3]) == list and len(imtext_memory_arr[3]) > 0:
-                text_list = ['Original Image', 'Red Channel Image', 'Green Channel Image', 'Blue Channel Image']
-                text_cell_id_list = imtext_memory_arr[3]
-                for i in range(0, min(4, len(text_cell_id_list)) ):
-                    ### re.findall('(\\D+)',cell_id)[0], int(re.findall('(\\d+)',cell_id)[0])
-
-                    merge_cell_id = text_cell_id_list[i] + ':' + 'AB' + str(int(re.findall('(\\d+)', text_cell_id_list[i])[0]))
-                    self.xl_class.worksheet.merge_cells(merge_cell_id)
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, text_list[i]
-                        , 'string', text_cell_id_list[i], auto_fit = False
-                        , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
-
-                del text_list
-
-            del imtext_memory_arr
+            del imtext_cell_list_arr
 
             ##### Update the Excel Borders
-            if ws_max_row >= max(max_row_arr):
+            # group_print(ws_max_row, max_row_arr)
+            if ws_max_row >= 39:
                 set_outer_border(ws = self.xl_class.worksheet, min_row = 39, max_row = ws_max_row, min_col = 'A', max_col='AN'
-                    , border_style = None
+                    , border_type = None)
+
+            if max(max_row_arr) > 39:
+                set_outer_border(ws = self.xl_class.worksheet, min_row = 39, max_row = max(max_row_arr), min_col = 'A', max_col='AN'
+                    , border_style = 'medium'
                     , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
 
-                if max(max_row_arr) < 39:
-                    set_outer_border(ws = self.xl_class.worksheet, min_row = 39, min_col = 'A', max_col='AN'
-                        , border_style = 'medium'
-                        , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-                else:
-                    set_outer_border(ws = self.xl_class.worksheet, min_row = 39, max_row = max(max_row_arr), min_col = 'A', max_col='AN'
-                        , border_style = 'medium'
-                        , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-
-            elif ws_max_row < max(max_row_arr):
-                set_outer_border(ws = self.xl_class.worksheet, min_row = ws_max_row, max_row = max(max_row_arr), min_col = 'A', max_col='AN'
+            else:
+                set_outer_border(ws = self.xl_class.worksheet, min_row = 39, min_col = 'A', max_col='AN'
                     , border_style = 'medium'
                     , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
 
             del max_row_arr
 
+
+        report_data_list = [test_criteria_data_list, cam_detail_data_list, lens_detail_data_list, ctrl_detail_data_list, light_detail_data_list]
+
+        del test_criteria_data_list
+        del cam_detail_data_list
+        del lens_detail_data_list
+        del ctrl_detail_data_list
+        del light_detail_data_list
+
+        return event_input_err, report_data_list
+
+    def generate_report_func(self):
+        # print('xl_data: ', xl_data)
+        self.loading_disp_start()
+        self.thread_event.set()
+
+        self.err_msgbox_flag_1 = False
+
+        event_error = False
+        self.err_msgbox_flag_2 = False
+
+        event_reset = False
+
+        prev_worksheet_name = None
+
+        self.report_error_msgbox_1()
+        self.report_error_msgbox_2()
+        self.report_info_msgbox()
+
+        widget_disable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
+            , self.worksheet_name_dropbox, self.worksheet_name_entry
+            , self.rename_worksheet_btn, self.create_worksheet_checkbtn
+            , self.reload_worksheet_btn)
+
+        if self.xl_load_path is not None and self.update_report_bool.get() == 1:
+            try:
+                if self.create_worksheet_bool.get() == 0:
+                    self.xl_class.xl_update_workbook(self.xl_load_path, sheet_name = self.xl_worksheet_name)
+
+                elif self.create_worksheet_bool.get() == 1:
+                    self.load_worksheet_name()
+                    prev_worksheet_name = copy.copy(self.xl_worksheet_name)
+
+                    self.xl_worksheet_name = self.xl_class.xl_update_workbook(self.xl_load_path
+                        , sheet_name = self.xl_worksheet_name, new_ws_bool = True)
+
+            except Exception:
+                self.load_worksheet_name()
+                self.xl_worksheet_name = self.xl_class.xl_new_workbook(self.xl_worksheet_name)
+                self.xl_class.xl_init_workbook(init_row_num = 2, init_col_char = 'A')
+        else:
+            self.load_worksheet_name()
+            self.xl_worksheet_name = self.xl_class.xl_new_workbook(self.xl_worksheet_name)
+            self.xl_class.xl_init_workbook(init_row_num = 2, init_col_char = 'A')
+
+
+        event_input_err, report_data_list = self.insert_report_data()
             
         if self.xl_load_path is not None and self.update_report_bool.get() == 1:
             # print("Updating...")
@@ -2276,11 +2600,11 @@ class Report_GUI(tk.Frame):
                     self.xl_class.xl_close_workbook()
 
                     self.update_edit_entry_data("Sample Detail", [self.photo_dim_var.get()])
-                    self.update_edit_entry_data("Testing Criteria", test_criteria_data_list)
-                    self.update_edit_entry_data("Camera Details", cam_detail_data_list)
-                    self.update_edit_entry_data("Lens Details", lens_detail_data_list)
-                    self.update_edit_entry_data("Controller Details", ctrl_detail_data_list)
-                    self.update_edit_entry_data("Lighting Details", light_detail_data_list)
+                    self.update_edit_entry_data("Testing Criteria", report_data_list[0])
+                    self.update_edit_entry_data("Camera Details", report_data_list[1])
+                    self.update_edit_entry_data("Lens Details", report_data_list[2])
+                    self.update_edit_entry_data("Controller Details", report_data_list[3])
+                    self.update_edit_entry_data("Lighting Details", report_data_list[4])
 
                     self.edit_data_dict["Sample Image"][2] = list(self.photo_upload_img_dict.values())
                     self.edit_data_dict["Lighting Drawing"][2] = list(self.light_setup_img_dict.values())
@@ -2328,11 +2652,11 @@ class Report_GUI(tk.Frame):
                     self.xl_class.xl_close_workbook()
                     
                     self.update_edit_entry_data("Sample Detail", [self.photo_dim_var.get()])
-                    self.update_edit_entry_data("Testing Criteria", test_criteria_data_list)
-                    self.update_edit_entry_data("Camera Details", cam_detail_data_list)
-                    self.update_edit_entry_data("Lens Details", lens_detail_data_list)
-                    self.update_edit_entry_data("Controller Details", ctrl_detail_data_list)
-                    self.update_edit_entry_data("Lighting Details", light_detail_data_list)
+                    self.update_edit_entry_data("Testing Criteria", report_data_list[0])
+                    self.update_edit_entry_data("Camera Details", report_data_list[1])
+                    self.update_edit_entry_data("Lens Details", report_data_list[2])
+                    self.update_edit_entry_data("Controller Details", report_data_list[3])
+                    self.update_edit_entry_data("Lighting Details", report_data_list[4])
 
                     self.edit_data_dict["Sample Image"][2] = list(self.photo_upload_img_dict.values())
                     self.edit_data_dict["Lighting Drawing"][2] = list(self.light_setup_img_dict.values())
@@ -2368,12 +2692,7 @@ class Report_GUI(tk.Frame):
 
         self.thread_event.clear()
 
-        del row_measure_dict
-        del test_criteria_data_list
-        del cam_detail_data_list
-        del lens_detail_data_list
-        del ctrl_detail_data_list
-        del light_detail_data_list
+        del report_data_list
 
         if event_reset == False:
             self.worksheet_name_dropbox['state'] = 'readonly'
@@ -2383,11 +2702,13 @@ class Report_GUI(tk.Frame):
                 , self.rename_worksheet_btn, self.create_worksheet_checkbtn
                 , self.reload_worksheet_btn)
 
+        self.loading_disp_stop()
+
     def update_report_func(self):
         if self.xl_load_bool == True:
+            self.loading_disp_start()
             self.thread_event.set()
 
-            event_input_err = False
             self.err_msgbox_flag_1 = False
 
             event_error = False
@@ -2405,157 +2726,18 @@ class Report_GUI(tk.Frame):
                 , self.reload_worksheet_btn)                
 
             if self.create_worksheet_bool.get() == 0:
-                row_measure_dict, _ = self.xl_class.xl_load_workbook(self.xl_load_path, sheet_name = self.xl_worksheet_name)
+                self.xl_class.xl_update_workbook(self.xl_load_path, sheet_name = self.xl_worksheet_name)
 
             elif self.create_worksheet_bool.get() == 1:
                 self.load_worksheet_name()
                 prev_worksheet_name = copy.copy(self.xl_worksheet_name)
 
-                row_measure_dict, self.xl_worksheet_name = self.xl_class.xl_load_workbook(self.xl_load_path
+                self.xl_worksheet_name = self.xl_class.xl_update_workbook(self.xl_load_path
                     , sheet_name = self.xl_worksheet_name, new_ws_bool = True)
 
             # print('Worksheet: ', self.xl_class.worksheet.title)
-            # print(row_measure_dict)
 
-            test_criteria_data_list = []
-            for tk_widget in self.test_criteria_entry_list:
-                test_criteria_data_list = self.insert_data_list(test_criteria_data_list, tk_widget.get_text())
-
-            cam_detail_data_list = []
-            for tk_widget in self.cam_detail_entry_list:
-                cam_detail_data_list = self.insert_data_list(cam_detail_data_list, tk_widget.get_text())
-
-            lens_detail_data_list = []
-            for tk_widget in self.lens_detail_entry_list:
-                lens_detail_data_list = self.insert_data_list(lens_detail_data_list, tk_widget.get_text())
-
-            ctrl_detail_data_list = []
-            for tk_widget in self.ctrl_detail_entry_list:
-                ctrl_detail_data_list = self.insert_data_list(ctrl_detail_data_list, tk_widget.get_text())
-
-            light_detail_data_list = []
-            for tk_widget in self.light_detail_entry_list:
-                light_detail_data_list = self.insert_data_list(light_detail_data_list, tk_widget.get_text())
-
-
-            if ('' in test_criteria_data_list) or ('' in cam_detail_data_list) or ('' in lens_detail_data_list):
-                event_input_err = True # True # False
-            # print(test_criteria_data_list)
-
-            if event_input_err == False:
-                self.xl_class.cell_insert_data(self.xl_class.worksheet, self.photo_dim_var.get()
-                    , 'string', 'B' + str(3) 
-                    , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
-
-                i = 5
-                for entry_data in test_criteria_data_list:
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
-                        , 'string', 'O' + str(i) 
-                        , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
-                    i += 1
-                
-                i = 22
-                for entry_data in cam_detail_data_list:
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
-                        , 'string', 'N' + str(i) 
-                        , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
-                    i += 1
-
-                i = 33
-                for entry_data in lens_detail_data_list:
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
-                        , 'string', 'N' + str(i) 
-                        , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
-                    i += 1
-
-                i = 17
-                for entry_data in ctrl_detail_data_list:
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
-                        , 'string', 'N' + str(i) 
-                        , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
-                    i += 1
-
-
-                i = 12
-                for entry_data in light_detail_data_list:
-                    self.xl_class.cell_insert_data(self.xl_class.worksheet, entry_data
-                        , 'string', 'N' + str(i) 
-                        , alignment_dict = dict(wrapText=True, horizontal = 'right', vertical = 'center'))
-                    i += 1
-
-                del i
-
-                self.xl_class.xl_image_clear_all()
-                # print(self.photo_upload_img_dict)
-                max_row_arr = np.zeros(6, dtype=np.uint8) #To compute the new max row, to adjust the bottom borders
-                imtext_memory_arr = np.empty(6, dtype=object)
-
-                new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.photo_upload_img_dict, 5, 'A', 'F', check_col_char = 'A', check_row_num = 5, row_measure_dict = row_measure_dict)
-                max_row_arr[0] = new_max_row
-
-                new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.light_setup_img_dict, 5, 'G', 'L', check_col_char = 'G', check_row_num = 5, row_measure_dict = row_measure_dict)
-                max_row_arr[1] = new_max_row
-
-                new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.target_upload_img_dict, 4, 'Q', 'V', check_col_char = 'Q', check_row_num = 4, row_measure_dict = row_measure_dict)
-                max_row_arr[2] = new_max_row
-
-                new_max_row, imtext_memory_arr[3] = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.gray_upload_img_dict, 4, 'W', 'AB', check_col_char = 'W', check_row_num = 4
-                    , row_measure_dict = row_measure_dict, get_text_cell_id = True)
-                max_row_arr[3] = new_max_row
-
-                new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.binary_upload_img_dict, 4, 'AC', 'AH', check_col_char = 'AC', check_row_num = 4, row_measure_dict = row_measure_dict)
-                max_row_arr[4] = new_max_row
-
-                new_max_row = self.xl_class.cell_insert_img(self.xl_class.worksheet, self.setup_upload_img_dict, 4, 'AI', 'AN', check_col_char = 'AI', check_row_num = 4, row_measure_dict = row_measure_dict)
-                max_row_arr[5] = new_max_row
-
-
-                ws_max_row = self.xl_class.worksheet.max_row
-                # group_print(ws_max_row, max(max_row_arr))
-
-                ### Temporary Method of Adding Labels to Grayscale Upload Image(s):
-                xl_unmerge_cell(self.xl_class.worksheet, 'W', 3, 'AB', max(ws_max_row, max(max_row_arr))
-                    , del_value = True
-                    , border_type = 'left-right')
-                # print(imtext_memory_arr)
-                if type(imtext_memory_arr[3]) == list and len(imtext_memory_arr[3]) > 0:
-                    text_list = ['Original Image', 'Red Channel Image', 'Green Channel Image', 'Blue Channel Image']
-                    text_cell_id_list = imtext_memory_arr[3]
-                    for i in range(0, min(4, len(text_cell_id_list)) ):
-                        ### re.findall('(\\D+)',cell_id)[0], int(re.findall('(\\d+)',cell_id)[0])
-
-                        merge_cell_id = text_cell_id_list[i] + ':' + 'AB' + str(int(re.findall('(\\d+)', text_cell_id_list[i])[0]))
-                        self.xl_class.worksheet.merge_cells(merge_cell_id)
-                        self.xl_class.cell_insert_data(self.xl_class.worksheet, text_list[i]
-                            , 'string', text_cell_id_list[i], auto_fit = False
-                            , alignment_dict = dict(wrapText=True, horizontal = 'left', vertical = 'center'))
-
-                    del text_list
-
-                del imtext_memory_arr
-
-                ##### Update the Excel Borders
-                if ws_max_row >= max(max_row_arr):
-                    set_outer_border(ws = self.xl_class.worksheet, min_row = 39, max_row = ws_max_row, min_col = 'A', max_col='AN'
-                        , border_style = None
-                        , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-
-                    if max(max_row_arr) < 39:
-                        set_outer_border(ws = self.xl_class.worksheet, min_row = 39, min_col = 'A', max_col='AN'
-                            , border_style = 'medium'
-                            , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-                    else:
-                        set_outer_border(ws = self.xl_class.worksheet, min_row = 39, max_row = max(max_row_arr), min_col = 'A', max_col='AN'
-                            , border_style = 'medium'
-                            , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-
-                elif ws_max_row < max(max_row_arr):
-                    set_outer_border(ws = self.xl_class.worksheet, min_row = ws_max_row, max_row = max(max_row_arr), min_col = 'A', max_col='AN'
-                        , border_style = 'medium'
-                        , col_separator = ['F', 'L', 'P', 'V', 'AB', 'AH'], border_type = 'bottom')
-
-                del max_row_arr
-
+            event_input_err, report_data_list = self.insert_report_data()
 
             if event_input_err == True:
                 if self.create_worksheet_bool.get() == 1:
@@ -2578,11 +2760,11 @@ class Report_GUI(tk.Frame):
                     self.xl_class.xl_close_workbook()
 
                     self.update_edit_entry_data("Sample Detail", [self.photo_dim_var.get()])
-                    self.update_edit_entry_data("Testing Criteria", test_criteria_data_list)
-                    self.update_edit_entry_data("Camera Details", cam_detail_data_list)
-                    self.update_edit_entry_data("Lens Details", lens_detail_data_list)
-                    self.update_edit_entry_data("Controller Details", ctrl_detail_data_list)
-                    self.update_edit_entry_data("Lighting Details", light_detail_data_list)
+                    self.update_edit_entry_data("Testing Criteria", report_data_list[0])
+                    self.update_edit_entry_data("Camera Details", report_data_list[1])
+                    self.update_edit_entry_data("Lens Details", report_data_list[2])
+                    self.update_edit_entry_data("Controller Details", report_data_list[3])
+                    self.update_edit_entry_data("Lighting Details", report_data_list[4])
 
                     self.edit_data_dict["Sample Image"][2] = list(self.photo_upload_img_dict.values())
                     self.edit_data_dict["Lighting Drawing"][2] = list(self.light_setup_img_dict.values())
@@ -2614,13 +2796,7 @@ class Report_GUI(tk.Frame):
 
             self.thread_event.clear()
 
-            del row_measure_dict
-
-            del test_criteria_data_list
-            del cam_detail_data_list
-            del lens_detail_data_list
-            del ctrl_detail_data_list
-            del light_detail_data_list
+            del report_data_list
 
             self.worksheet_name_dropbox['state'] = 'readonly'
 
@@ -2628,6 +2804,8 @@ class Report_GUI(tk.Frame):
                 , self.worksheet_name_entry
                 , self.rename_worksheet_btn, self.create_worksheet_checkbtn
                 , self.reload_worksheet_btn)
+
+        self.loading_disp_stop()
 
     def event_log_custom_msg(self, msg_str):
         event_str = str(datetime.now().strftime("(%d-%m-%Y, %H:%M:%S) ")) + str(msg_str) + '\n\n'
@@ -2741,6 +2919,8 @@ class Report_GUI(tk.Frame):
         if not self.thread_event.isSet():
             if self.__edit_bool == True:
                 if self.__btn_blink_state == True:
+                    if self.btn_blink_handle is not None:
+                        self.after_cancel(self.btn_blink_handle)
                     self.btn_blink_handle = self.after(800, self.btn_blink_start)
                     self.generate_report_btn['bg'] = 'gold' #'DarkGoldenrod1'
                     self.generate_report_btn['fg'] = 'black'
@@ -2749,6 +2929,8 @@ class Report_GUI(tk.Frame):
                     self.__btn_blink_state = False
 
                 else:
+                    if self.btn_blink_handle is not None:
+                        self.after_cancel(self.btn_blink_handle)
                     self.btn_blink_handle = self.after(650, self.btn_blink_start)
                     self.generate_report_btn['bg'] = 'SystemButtonFace'
                     self.generate_report_btn['fg'] = 'black'
@@ -2757,6 +2939,8 @@ class Report_GUI(tk.Frame):
                     self.__btn_blink_state = True
 
             else:
+                if self.btn_blink_handle is not None:
+                    self.after_cancel(self.btn_blink_handle)
                 self.btn_blink_handle = self.after(150, self.btn_blink_start)
                 self.generate_report_btn['bg'] = 'SystemButtonFace'
                 self.generate_report_btn['fg'] = 'black'
@@ -2765,6 +2949,8 @@ class Report_GUI(tk.Frame):
                 self.__btn_blink_state = True
 
         elif self.thread_event.isSet():
+            if self.btn_blink_handle is not None:
+                self.after_cancel(self.btn_blink_handle)
             self.btn_blink_handle = self.after(150, self.btn_blink_start)
             self.generate_report_btn['bg'] = 'SystemButtonFace'
             self.generate_report_btn['fg'] = 'black'
@@ -2782,3 +2968,26 @@ class Report_GUI(tk.Frame):
             self.generate_report_btn['fg'] = 'black'
             self.update_report_btn['bg'] = 'SystemButtonFace'
             self.update_report_btn['fg'] = 'black'
+
+
+    def loading_disp_start(self):
+        curr_text = self.loading_tk_var.get()
+        if curr_text == 'Processing':
+            self.loading_tk_var.set('Processing.')
+        elif curr_text == 'Processing.':
+            self.loading_tk_var.set('Processing..')
+        elif curr_text == 'Processing..':
+            self.loading_tk_var.set('Processing...')
+        else:
+            self.loading_tk_var.set('Processing')
+
+        self.loading_display.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+        self.ctrl_tk_frame1.place_forget()
+        self.__loading_handle = self.after(300, self.loading_disp_start)
+
+    def loading_disp_stop(self):
+        self.loading_display.place_forget()
+        self.ctrl_tk_frame1.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+        self.loading_tk_var.set('Processing')
+        if self.__loading_handle is not None:
+            self.after_cancel(self.__loading_handle)

@@ -3606,8 +3606,6 @@ class LC20_GUI(tk.Frame):
                     t1 = time.perf_counter()
                     if cam_active_str == 'Hikvision':
                         _cam_class.obj_cam_operation.Trigger_once()
-                    elif cam_active_str == 'Crevis':
-                        _cam_class.crevis_operation.Trigger_once()
 
                     t2 = time.perf_counter()
 
@@ -3642,9 +3640,6 @@ class LC20_GUI(tk.Frame):
         if cam_active_str == 'Hikvision':
             _cam_class.obj_cam_operation.SQ_frame_display(self.sq_frame_img_list)
             _cam_class.obj_cam_operation.Auto_Save_SQ_Frame()
-        elif cam_active_str == 'Crevis':
-            _cam_class.crevis_operation.SQ_frame_display(self.sq_frame_img_list)
-            _cam_class.crevis_operation.Auto_Save_SQ_Frame()
         
         _cam_class.SQ_fr_popout_load_list(sq_frame_img_list = self.sq_frame_img_list.copy())
         _cam_class.SQ_fr_popout_disp_func(sq_frame_img_list = self.sq_frame_img_list.copy())
@@ -3696,11 +3691,6 @@ class LC20_GUI(tk.Frame):
             elif cam_active_str is not None and type(cam_active_str) == str:
                 if cam_active_str == 'Hikvision':
                     if _cam_class.obj_cam_operation is not None and _cam_class.obj_cam_operation.trigger_mode == True and _cam_class.obj_cam_operation.b_start_grabbing == True and _cam_class.obj_cam_operation.trigger_src == 7:
-                        return True
-                    else:
-                        return False
-                elif cam_active_str == 'Crevis':
-                    if _cam_class.crevis_operation is not None and _cam_class.crevis_operation.trigger_mode == True and _cam_class.crevis_operation.b_start_grabbing == True and _cam_class.crevis_operation.trigger_src == 'SOFTWARE':
                         return True
                     else:
                         return False

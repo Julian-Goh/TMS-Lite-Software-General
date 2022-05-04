@@ -103,6 +103,7 @@ class CustomToplvl(tk.Toplevel):
         self.deiconify()
 
     def close(self):
+        self.grab_release()
         self.withdraw()
         self.__open_bool = False
 
@@ -133,3 +134,4 @@ class CustomToplvl(tk.Toplevel):
         self.__local_after_events = [after_event for after_event in self.__local_after_events if after_event in all_after_events]
 
         return tk_thread_id
+        

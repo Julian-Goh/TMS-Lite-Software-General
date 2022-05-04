@@ -30,3 +30,4 @@ class CustomBox(ttk.Combobox):
         #   if font was configured - configure font for popdown as well
         if 'font' in kw or 'font' in cnf:
             self._handle_popdown_font()
+            

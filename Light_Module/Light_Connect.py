@@ -122,10 +122,10 @@ class Light_Connect():
         self.LC18SQ_lib = LC18Library.LC18SQ()
         self.LC20_lib   = LC20Library.LC20SQ()
 
-        print(self.LC18_lib )
-        print(self.LC18KP_lib)
-        print(self.LC18SQ_lib)
-        print(self.LC20_lib)
+        # print(self.LC18_lib )
+        # print(self.LC18KP_lib)
+        # print(self.LC18SQ_lib)
+        # print(self.LC20_lib)
 
         self.main_lib = None
 

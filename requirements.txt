@@ -5,7 +5,7 @@ pythonnet==2.5.1
 scikit-image==0.18.1
 scipy==1.6.0
 imutils==0.5.3
-pyinstaller==4.1
+pyinstaller==4.10
 matplotlib==3.3.3
 imageio==2.9.0
 openpyxl==3.0.7

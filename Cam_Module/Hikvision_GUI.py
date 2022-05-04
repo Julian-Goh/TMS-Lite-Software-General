@@ -1,6 +1,5 @@
 ####-- LIST OF GROUP FUNCTIONS -- ####
 #1. CAMERA POPPOUT DISPLAY
-#2. IVS Tool
 #3. PIXEL COUNT + ROI GENERATION
 #4. CAMERA DISPLAY & CONTROL GUI
 #5. CAMERA CONNECTIONS
@@ -53,13 +52,6 @@ from ctypes import *
 
 import threading
 import msvcrt
-
-from Camera_IVS.Camera_Tesseract import Camera_Tesseract
-from Camera_IVS.Camera_Threshold import Camera_Threshold
-
-from tesserocr import get_languages
-from tesserocr import PyTessBaseAPI, PSM, OEM, RIL
-import tesserocr
 
 # code_PATH = os.getcwd()
 # sys.path.append(code_PATH + '\\MVS-Python\\MvImport')
@@ -159,55 +151,6 @@ class Hikvision_GUI(tk.Frame):
 
         self.imsave_msgbox_handle = None
         self.__start_grab = False
-
-        ################################################
-
-        tessdata_path = os.getcwd() + '\\tessdata\\'
-        lang = 'eng'
-        psm = PSM.SINGLE_BLOCK
-        oem = OEM.TESSERACT_LSTM_COMBINED #OEM.LSTM_ONLY #OEM.TESSERACT_LSTM_COMBINED
-        os.environ['OMP_THREAD_LIMIT'] = '1' ## Comment: Limit OpenMP number of threads
-        get_languages(tessdata_path)
-        # print(dir(tesserocr), tesserocr.tesseract_version())
-        self.tess_api = PyTessBaseAPI(path = tessdata_path
-                    , lang = lang
-                    , psm = psm, oem = oem)
-        """psm = An enum that defines all available page segmentation modes.
-        Attributes:
-            OSD_ONLY: Orientation and script detection only.
-            AUTO_OSD: Automatic page segmentation with orientation and script detection. (OSD)
-            AUTO_ONLY: Automatic page segmentation, but no OSD, or OCR.
-            AUTO: Fully automatic page segmentation, but no OSD. (:mod:`tesserocr` default)
-            SINGLE_COLUMN: Assume a single column of text of variable sizes.
-            SINGLE_BLOCK_VERT_TEXT: Assume a single uniform block of vertically aligned text.
-            SINGLE_BLOCK: Assume a single uniform block of text.
-            SINGLE_LINE: Treat the image as a single text line.
-            SINGLE_WORD: Treat the image as a single word.
-            CIRCLE_WORD: Treat the image as a single word in a circle.
-            SINGLE_CHAR: Treat the image as a single character.
-            SPARSE_TEXT: Find as much text as possible in no particular order.
-            SPARSE_TEXT_OSD: Sparse text with orientation and script det.
-            RAW_LINE: Treat the image as a single text line, bypassing hacks that are Tesseract-specific.
-            COUNT: Number of enum entries.
-        """
-
-        """oem: An enum that defines available OCR engine modes.
-        Attributes:
-            TESSERACT_ONLY: Run Tesseract only - fastest
-            LSTM_ONLY: Run just the LSTM line recognizer. (>=v4.00)
-            TESSERACT_LSTM_COMBINED: Run the LSTM recognizer, but allow fallback
-                to Tesseract when things get difficult. (>=v4.00)
-            CUBE_ONLY: Specify this mode when calling Init*(), to indicate that
-                any of the above modes should be automatically inferred from the
-                variables in the language-specific config, command-line configs, or
-                if not specified in any of the above should be set to the default
-                `OEM.TESSERACT_ONLY`.
-            TESSERACT_CUBE_COMBINED: Run Cube only - better accuracy, but slower.
-            DEFAULT: Run both and combine results - best accuracy.
-        """
-        self.curr_ivs_mode = None
-        self.ivs_btn_mode = 'disable'
-        self.ivs_start_bool = False
 
         ################################################
         self.popout_status = False
@@ -488,7 +431,6 @@ class Hikvision_GUI(tk.Frame):
             _toplvl.geometry("{}x{}+{}+{}".format(_toplvl_W, _toplvl_H, x_coordinate, y_coordinate))
             
             self.check_cam_popout_disp()
-            self.ivs_type_combobox_state()
             self.sel_ori_btn.invoke()
             if self.__start_grab == False:
                 self.cam_popout_disp.canvas_clear(init = True)
@@ -579,11 +521,6 @@ class Hikvision_GUI(tk.Frame):
         self.auto_graph_status.set(1)
         self.graph_popout_close()
 
-        ### Reset IVS settings
-        self.IVS_disable_init(reset_toplvl = True, reset_fit_display = True)
-        self.ivs_type_combobox.current(0)
-        self.ivs_type_sel()
-
     def cam_popout_init(self):
         clear_display_func(self.cam_display_rgb, self.cam_display_R, self.cam_display_G, self.cam_display_B, self.cam_disp_sq_live)
         self.popout_ch_sel_btn_gen()
@@ -598,7 +535,7 @@ class Hikvision_GUI(tk.Frame):
         elif self.cam_conn_status == True:
             self.popout_save_btn['state'] = 'normal'
 
-        self.cam_popout_disp = CanvasImage(self.cam_popout_toplvl, tess_api = self.tess_api)
+        self.cam_popout_disp = CanvasImage(self.cam_popout_toplvl)
         self.cam_popout_disp.place(x=0, y=30+30+30, relwidth = 1, relheight = 1
             , width = 0, height = -(30+30+30), anchor = 'nw')
 
@@ -656,29 +593,6 @@ class Hikvision_GUI(tk.Frame):
         self.popout_capture_img_btn['width'] = set_width - 28
         del set_width
 
-        self.ivs_operate_btn = tk.Button(self.cam_popout_toplvl, relief = tk.GROOVE, width = '12')
-        # self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, btn_mode = self.ivs_btn_mode)
-        self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click,btn_mode = self.ivs_btn_mode)
-        self.ivs_operate_btn.place(x=2,y=30 + 30)
-
-        self.ivs_type_list = ['BLOB + OCR', 'THRESHOLD']
-        self.ivs_type_combobox = CustomBox(self.cam_popout_toplvl, values=self.ivs_type_list, width=13, state='readonly', font = 'Helvetica 10')
-        self.ivs_type_combobox.unbind_class("TCombobox", "<MouseWheel>")
-        self.ivs_type_combobox.bind('<<ComboboxSelected>>', self.ivs_type_sel)
-        self.ivs_type_sel()
-        self.ivs_type_combobox.current(0)
-        self.ivs_type_combobox_state()
-
-        self.ivs_type_combobox.place(x=100, y=32 + 30)
-
-        self.IVS_setting_init()
-
-        self.ivs_ctrl_btn = tk.Button(self.cam_popout_toplvl, text = 'IVS Settings', relief = tk.GROOVE, font = 'Helvetica 10')
-        self.ivs_ctrl_btn['command'] = self.IVS_open_setting
-        self.ivs_ctrl_btn['state'] = 'disable'
-        #self.ivs_ctrl_btn.place(x=470, y=0+30)
-        self.ivs_ctrl_btn.place(x=220, y=30+30)
-
         self.help_widget = tk.Label(self.cam_popout_toplvl, bg = 'white', image = self.help_icon)
         CreateToolTip(self.help_widget, '1. LEFT-CLICK Mouse & Drag\n   to Move Image inside Image Display.\n' +
                                         '2. RIGHT-CLICK Mouse & Drag\n   to Draw ROI Box (with ROI enabled).\n' +
@@ -687,47 +601,40 @@ class Hikvision_GUI(tk.Frame):
                     ,30, 0, width = 240, height = 100)
         self.help_widget.place(relx=1, x = -35, y = 30+30, anchor = 'nw')
 
-        # self.ivs_close_setting_btn = tk.Button(self.cam_popout_toplvl, relief = tk.GROOVE, width = 2, height = 1)
-        self.ivs_close_setting_btn = tk.Button(self.cam_popout_toplvl, relief = tk.GROOVE, bd = 0, bg = 'white', image = self.close_icon)
-        self.ivs_close_setting_btn['command'] = self.IVS_close_setting
 
     def popout_cam_disp_func(self, numArray):
         #print(self.popout_status)
         if True == self.cam_popout_toplvl.check_open():
-            if self.ivs_start_bool == True and self.ivs_type_combobox.get() == self.ivs_type_list[1]: ## If IVS Threshold is Active
-                self.ivs_threshold_class.IVS_threshold_func(numArray, self.popout_var_mode)
-
-            else:
-                if len(numArray.shape) == 3:
-                    if self.popout_var_mode == 'original':
-                        self.cam_popout_disp.canvas_default_load(img = numArray
-                            , fit_to_display_bool = True
-                            , display_width = self.cam_popout_disp.imframe.winfo_width()
-                            , display_height = self.cam_popout_disp.imframe.winfo_height())
-
-                    elif self.popout_var_mode == 'red':
-                        self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 0
-                            , fit_to_display_bool = True
-                            , display_width = self.cam_popout_disp.imframe.winfo_width()
-                            , display_height = self.cam_popout_disp.imframe.winfo_height())
-
-                    elif self.popout_var_mode == 'green':
-                        self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 1
-                            , fit_to_display_bool = True
-                            , display_width = self.cam_popout_disp.imframe.winfo_width()
-                            , display_height = self.cam_popout_disp.imframe.winfo_height())
-
-                    elif self.popout_var_mode == 'blue':
-                        self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 2
-                            , fit_to_display_bool = True
-                            , display_width = self.cam_popout_disp.imframe.winfo_width()
-                            , display_height = self.cam_popout_disp.imframe.winfo_height())
-
-                elif len(numArray.shape) == 2:
+            if len(numArray.shape) == 3:
+                if self.popout_var_mode == 'original':
                     self.cam_popout_disp.canvas_default_load(img = numArray
                         , fit_to_display_bool = True
                         , display_width = self.cam_popout_disp.imframe.winfo_width()
                         , display_height = self.cam_popout_disp.imframe.winfo_height())
+
+                elif self.popout_var_mode == 'red':
+                    self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 0
+                        , fit_to_display_bool = True
+                        , display_width = self.cam_popout_disp.imframe.winfo_width()
+                        , display_height = self.cam_popout_disp.imframe.winfo_height())
+
+                elif self.popout_var_mode == 'green':
+                    self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 1
+                        , fit_to_display_bool = True
+                        , display_width = self.cam_popout_disp.imframe.winfo_width()
+                        , display_height = self.cam_popout_disp.imframe.winfo_height())
+
+                elif self.popout_var_mode == 'blue':
+                    self.cam_popout_disp.canvas_default_load(img = numArray, local_img_split = True, ch_index = 2
+                        , fit_to_display_bool = True
+                        , display_width = self.cam_popout_disp.imframe.winfo_width()
+                        , display_height = self.cam_popout_disp.imframe.winfo_height())
+
+            elif len(numArray.shape) == 2:
+                self.cam_popout_disp.canvas_default_load(img = numArray
+                    , fit_to_display_bool = True
+                    , display_width = self.cam_popout_disp.imframe.winfo_width()
+                    , display_height = self.cam_popout_disp.imframe.winfo_height())
 
         else:
             self.cam_popout_disp.canvas_clear(init = True)
@@ -739,10 +646,6 @@ class Hikvision_GUI(tk.Frame):
             self.curr_roi_mode = None
             self.histogram_stop_auto_update()
             self.profile_stop_auto_update()
-
-            if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                self.IVS_disable_init(reset_toplvl = True, fit_display = False, reset_fit_display = False)
-            ### We do not want to reset the position of img display AND we do not want to trigger the fit display feature.
 
         elif self.roi_status_var.get() == 1:
             self.roi_type_combobox['state'] = 'readonly'
@@ -763,22 +666,11 @@ class Hikvision_GUI(tk.Frame):
                         self.hist_view_btn.invoke()
                         self.profile_view_btn['state'] = 'disable'
 
-                    if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                        if self.ivs_start_bool == True:
-                            self.IVS_close_setting()
-                        self.ivs_start_bool = False
-                        self.IVS_stop_func()
-                        ### Enable IVS Start button if IVS Mode = BLOB+OCR
-                        self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = 'start')
-
                 elif _enable_status == False:
                     self.curr_roi_mode = None
                     self.roi_status_var.set(0)
                     self.roi_type_combobox['state'] = 'disable'
-                    if self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-                        pass
-                    else:
-                        self.IVS_disable_init()
+
 
         elif self.roi_type_combobox.get() == self.roi_type_list[1]: #LINE
             if self.roi_type_combobox.get() != self.curr_roi_mode:
@@ -793,28 +685,10 @@ class Hikvision_GUI(tk.Frame):
                         self.prof_clear_all()
                         self.profile_view_btn['state'] = 'normal'      
 
-                    if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                        if self.ivs_start_bool == True:
-                            self.IVS_close_setting()
-                        self.ivs_start_bool = False
-                        self.IVS_stop_func()
-                        ### Disable IVS Start button if IVS Mode = BLOB+OCR
-                        self.IVS_disable_init()
-
                 elif _enable_status == False:
                     self.curr_roi_mode = None
                     self.roi_status_var.set(0)
                     self.roi_type_combobox['state'] = 'disable'
-                    if self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-                        pass
-                    else:
-                        self.IVS_disable_init()
-
-    def ivs_type_combobox_state(self):
-        if self.__start_grab == True:
-            self.ivs_type_combobox['state'] = 'readonly'
-        elif self.__start_grab == False:
-            self.ivs_type_combobox['state'] = 'disable'
 
     def popout_ch_sel_btn_state(self, rgb_bool):
         if rgb_bool == True:
@@ -823,239 +697,6 @@ class Hikvision_GUI(tk.Frame):
             widget_enable(self.sel_ori_btn)
             widget_disable(self.sel_R_btn, self.sel_G_btn, self.sel_B_btn)
             self.sel_ori_btn.invoke()
-    ###############################################################################################
-    #2. IVS Tool
-    def IVS_disable_init(self, reset_toplvl = False, fit_display = False, reset_fit_display = False):
-        if reset_toplvl == True:
-            ### If reset_toplvl is True, we initialize the popout display toplvl/widget by closing IVS Setting GUI.
-            ### Allow the option to choose whether to reset_fit_display according to event callback.
-            self.IVS_close_setting(fit_display = fit_display, reset_fit_display = reset_fit_display)
-            self.ivs_start_bool = False
-            self.IVS_stop_func()
-
-        ### Reset IVS state to DISABLE MODE, self.ivs_btn_mode is changed to 'disable':
-        self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = 'disable')
-        self.ivs_type_combobox_state()
-        self.ivs_ctrl_btn['state'] = 'disable'
-
-    def IVS_close_setting(self, fit_display = True, reset_fit_display = False):
-        self.ivs_close_setting_btn.place_forget()
-        toplvl_W = 750
-        toplvl_H = 600
-
-        _toplvl = self.cam_popout_toplvl
-        _toplvl['width'] = toplvl_W
-        _toplvl['height'] = toplvl_H
-        _toplvl.minsize(width = toplvl_W, height = toplvl_H)
-
-        self.cam_popout_disp.place(x=0, y=30+30+30, relwidth = 1, relheight = 1
-            , width = 0, height = -(30+30+30), anchor = 'nw')
-
-        self.help_widget.place(relx=1, x = -35, y = 30+30, anchor = 'nw')
-
-        self.ivs_panel_frame.place_forget()
-        self.ivs_scroll_class.hide()
-        
-        self.ivs_tesseract_class.place_forget()
-        self.ivs_threshold_class.place_forget()
-
-        self.cam_popout_disp.canvas.bind('<Leave>', self.cam_popout_disp._unbound_to_mousewheel)
-
-        self.ivs_ctrl_btn.config(command=self.IVS_open_setting)
-
-        try:
-            self.ivs_tesseract_class.ivs_roi_img_toplvl.destroy()
-        except (AttributeError, tk.TclError):
-            pass
-
-        self.fit_to_display_btn['command'] = lambda: self.cam_popout_disp.fit_to_display(disp_W = self.cam_popout_disp.imframe.winfo_width()
-            , disp_H = self.cam_popout_disp.imframe.winfo_height())
-
-        if reset_fit_display == False:
-            if fit_display == True:
-                self.cam_popout_disp.imframe.update_idletasks()
-                self.fit_to_display_btn.invoke()
-
-        elif reset_fit_display == True:
-            self.cam_popout_disp.fit_to_display(disp_W = toplvl_W
-                , disp_H = toplvl_H - int(self.cam_popout_disp.imframe.place_info()['y']))
-
-
-    def IVS_open_setting(self):
-        # print('Resize Popout')
-        toplvl_W = 900 #1200
-        toplvl_H = 600 #800
-
-        _toplvl = self.cam_popout_toplvl
-
-        _toplvl['width'] = toplvl_W
-        _toplvl['height'] = toplvl_H
-        _toplvl.minsize(width = toplvl_W, height = toplvl_H)
-
-        self.cam_popout_disp.place(x=0, y=30+30+30, relwidth = 0.575, relheight = 1
-            , width = 0, height = -(30+30+30), anchor = 'nw')
-        
-        self.help_widget.place(relx=0.575, x = -35, y = 30+30, anchor = 'nw')
-
-        self.fit_to_display_btn['command'] = lambda: self.cam_popout_disp.fit_to_display(self.cam_popout_disp.imframe.winfo_width()
-            , np.multiply(self.cam_popout_disp.imframe.winfo_height(), 0.75))
-
-        self.ivs_close_setting_btn.place(relx=1, x = -35, y = 30+30, anchor = 'nw')
-
-        self.ivs_panel_frame.place(relx=0.6, rely=0, y = 90, relwidth = 0.4, relheight = 1, height = -90,anchor = 'nw')
-
-        self.ivs_tesseract_class.place_forget()
-        self.ivs_threshold_class.place_forget()
-
-        if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-            self.ivs_scroll_class.resize_frame(width = 340, height = 1000)
-            self.ivs_scroll_class.show(scroll_x = False, scroll_y = True)
-            self.ivs_tesseract_class.place(relx=0, rely = 0, relwidth = 1, relheight = 1, anchor = 'nw')
-
-        elif self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-            self.ivs_scroll_class.resize_frame(width = 340, height = 485)
-            self.ivs_scroll_class.show(scroll_x = False, scroll_y = False)
-            self.ivs_threshold_class.place(relx=0, rely = 0, relwidth = 1, relheight = 1, anchor = 'nw')
-
-        self.cam_popout_disp.canvas.bind('<Leave>', self.ivs_scroll_class._bound_to_mousewheel)
-        self.ivs_scroll_class.canvas.bind('<Leave>', self.ivs_scroll_class._bound_to_mousewheel)
-
-        self.ivs_ctrl_btn.config(command = lambda: None)
-
-        self.cam_popout_disp.imframe.update_idletasks()
-        self.fit_to_display_btn.invoke()
-
-    def IVS_setting_init(self):
-        _toplvl = self.cam_popout_toplvl
-        self.ivs_panel_frame = tk.Frame(_toplvl, bg = 'SystemButtonFace')
-        self.ivs_scroll_class = ScrolledCanvas(master = self.ivs_panel_frame
-            , bg = 'SystemButtonFace'
-            , frame_w = 340, frame_h = 1000, canvas_x = 0, canvas_y = 0)
-        
-        ivs_panel_parent = self.ivs_scroll_class.window_fr
-
-        self.ivs_tesseract_class = Camera_Tesseract(ivs_panel_parent, self.ivs_scroll_class
-            , custom_zoom_class = self.cam_popout_disp
-            , tk_img_format_sel = self.save_img_format_sel
-            , ivs_operate_btn = self.ivs_operate_btn
-            , window_icon = self.window_icon, inspect_icon = self.inspect_icon
-            , help_icon = self.help_icon, fit_to_display_icon = self.fit_to_display_icon
-            , add_icon = self.add_icon, minus_icon = self.minus_icon
-            , bg = 'SystemButtonFace')
-
-        self.ivs_threshold_class = Camera_Threshold(ivs_panel_parent, self.ivs_scroll_class
-            , custom_zoom_class = self.cam_popout_disp
-            , tk_img_format_sel = self.save_img_format_sel
-            , sel_ori_btn = self.sel_ori_btn
-            , sel_R_btn = self.sel_R_btn
-            , sel_G_btn = self.sel_G_btn
-            , sel_B_btn = self.sel_B_btn
-
-            , window_icon = self.window_icon, inspect_icon = self.inspect_icon
-            , help_icon = self.help_icon, fit_to_display_icon = self.fit_to_display_icon
-            , add_icon = self.add_icon, minus_icon = self.minus_icon
-            , toggle_ON_btn_img = self.toggle_ON_button_img
-            , toggle_OFF_btn_img = self.toggle_OFF_button_img
-            , bg = 'SystemButtonFace')
-
-    def ivs_button_state(self, tk_btn, tk_command = None, btn_mode = None):
-        if btn_mode == 'disable':
-            tk_btn['text'] = 'IVS DISABLED'
-            tk_btn['bg'] = 'gold'
-            tk_btn['fg'] = 'black'
-            tk_btn['activebackground'] = 'goldenrod1'
-            tk_btn['activeforeground'] = 'black'
-            tk_btn['font'] = 'Helvetica 9 bold'
-            tk_btn['command'] = tk_command
-
-        elif btn_mode == 'start':
-            tk_btn['text'] = 'IVS START'
-            tk_btn['bg'] = 'green3'
-            tk_btn['fg'] = 'white'
-            tk_btn['activebackground'] = 'forest green'
-            tk_btn['activeforeground'] = 'white'
-            tk_btn['font'] = 'Helvetica 9 bold'
-            tk_btn['command'] = tk_command
-
-        elif btn_mode == 'stop':
-            tk_btn['text'] = 'IVS STOP'
-            tk_btn['bg'] = 'red'
-            tk_btn['fg'] = 'white'
-            tk_btn['activebackground'] = 'red3'
-            tk_btn['activeforeground'] = 'white'
-            tk_btn['font'] = 'Helvetica 9 bold'
-            tk_btn['command'] = tk_command
-
-        else:
-            btn_mode = 'disable'
-            tk_btn['text'] = 'IVS DISABLE'
-            tk_btn['bg'] = 'gold'
-            tk_btn['fg'] = 'black'
-            tk_btn['activebackground'] = 'goldenrod1'
-            tk_btn['activeforeground'] = 'black'
-            tk_btn['font'] = 'Helvetica 9 bold'
-            tk_btn['command'] = tk_command
-
-        return btn_mode
-    
-    def ivs_button_click(self):
-        if self.ivs_btn_mode == 'start':
-            if self.cam_popout_disp is not None:
-                self.ivs_start_bool = True
-                self.IVS_start_func()
-                self.IVS_open_setting()
-
-                self.ivs_btn_mode = 'stop'
-                self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = self.ivs_btn_mode)
-                self.ivs_type_combobox['state'] = 'disable'
-                self.ivs_ctrl_btn['state'] = 'normal'
-
-        elif self.ivs_btn_mode == 'stop':
-            self.ivs_start_bool = False
-            self.IVS_stop_func()
-            self.IVS_close_setting()
-
-            self.ivs_btn_mode = 'start'
-            self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = self.ivs_btn_mode)
-            self.ivs_type_combobox['state'] = 'readonly'
-            self.ivs_ctrl_btn['state'] = 'disable'
-
-        else:
-            self.IVS_disable_init()
-
-    def IVS_start_func(self):
-        if self.ivs_start_bool == True:
-            if self.ivs_type_combobox.get() == self.ivs_type_list[0] and self.cam_popout_disp is not None:
-                self.ivs_tesseract_class.IVS_blob_auto_update()
-
-            elif self.ivs_type_combobox.get() == self.ivs_type_list[1] and self.cam_popout_disp is not None:
-                pass
-
-    def IVS_stop_func(self):
-        #Completely stop the IVS process.
-        self.cam_popout_disp.ivs_start_bool = False
-        self.ivs_tesseract_class.IVS_blob_stop_update()
-
-    def ivs_type_sel(self, event = None):
-        if self.ivs_type_combobox.get() != self.curr_ivs_mode:
-            if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                self.curr_ivs_mode = str(self.ivs_type_combobox.get())
-                
-                ## Condition(s) if ROI is currently disabled/enabled
-                if self.roi_status_var.get() == 0:
-                    self.IVS_disable_init()
-
-                elif self.roi_status_var.get() == 1:
-                    if self.curr_roi_mode == self.roi_type_list[0]:
-                        self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = 'start')
-
-                    elif self.curr_roi_mode == self.roi_type_list[1]:
-                        self.IVS_disable_init()
-
-            elif self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-                self.curr_ivs_mode = str(self.ivs_type_combobox.get())
-                ### Enable IVS Start button if IVS Mode = THRESHOLD
-                self.ivs_btn_mode = self.ivs_button_state(tk_btn = self.ivs_operate_btn, tk_command = self.ivs_button_click, btn_mode = 'start')
 
     ###############################################################################################
     #3. PIXEL COUNT + ROI GENERATION
@@ -3161,8 +2802,6 @@ class Hikvision_GUI(tk.Frame):
             self.__start_grab = False
             self.cam_display_forget_GUI_1()
 
-        self.ivs_type_combobox_state()
-
     # ch:停止取流 | en:Stop grab image
     def stop_grabbing(self):
         self.__start_grab = False
@@ -3364,30 +3003,13 @@ class Hikvision_GUI(tk.Frame):
 
     def img_save_func(self):
         if True == self.obj_cam_operation.check_cam_frame():
-            if self.ivs_start_bool == True:
-                self.obj_cam_operation.b_save = False
-                self.obj_cam_operation.custom_b_save = False
+            self.obj_cam_operation.custom_b_save = False
+            self.obj_cam_operation.b_save = True
+            self.obj_cam_operation.img_save_flag = False
+            self.obj_cam_operation.img_save_folder = None
+            self.img_save_msg_box()
 
-                if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                    self.ivs_tesseract_class.ivs_save_bool = True
-                    self.ivs_tesseract_class.ivs_save_flag = False
-                    self.ivs_tesseract_class.ivs_save_folder = None
-                    self.ivs_tesseract_class.ivs_save_msg_box()
-
-                elif self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-                    self.ivs_threshold_class.ivs_save_bool = True
-                    self.ivs_threshold_class.ivs_save_flag = False
-                    self.ivs_threshold_class.ivs_save_folder = None
-                    self.ivs_threshold_class.ivs_save_msg_box()
-
-            else:
-                self.obj_cam_operation.custom_b_save = False
-                self.obj_cam_operation.b_save = True
-                self.obj_cam_operation.img_save_flag = False
-                self.obj_cam_operation.img_save_folder = None
-                self.img_save_msg_box()
-
-                self.obj_cam_operation.Trigger_Mode_Save()
+            self.obj_cam_operation.Trigger_Mode_Save()
 
     def custom_img_save_func(self):
         if True == self.obj_cam_operation.check_cam_frame():
@@ -3429,47 +3051,18 @@ class Hikvision_GUI(tk.Frame):
                 # print(os.path.exists(f))
                 self.__save_curr_dir = folder_name
 
-                if self.ivs_start_bool == True:
-                    self.obj_cam_operation.b_save = False
-                    self.obj_cam_operation.custom_b_save = False
-
-                    if self.ivs_type_combobox.get() == self.ivs_type_list[0]:
-                        if (os.path.exists(f)) == True:
-                            self.ivs_tesseract_class.set_custom_save_param(folder_name, file_name, overwrite_bool = True)
-                        else:
-                            self.ivs_tesseract_class.set_custom_save_param(folder_name, file_name, overwrite_bool = False)
-
-                        self.ivs_tesseract_class.ivs_save_bool = False
-                        self.ivs_tesseract_class.custom_save_bool = True
-                        self.ivs_tesseract_class.ivs_save_flag = False
-                        self.ivs_tesseract_class.ivs_save_folder = None
-                        self.ivs_tesseract_class.ivs_save_msg_box()
-
-                    elif self.ivs_type_combobox.get() == self.ivs_type_list[1]:
-                        if (os.path.exists(f)) == True:
-                            self.ivs_threshold_class.set_custom_save_param(folder_name, file_name, overwrite_bool = True)
-                        else:
-                            self.ivs_threshold_class.set_custom_save_param(folder_name, file_name, overwrite_bool = False)
-
-                        self.ivs_threshold_class.ivs_save_bool = False
-                        self.ivs_threshold_class.custom_save_bool = True
-                        self.ivs_threshold_class.ivs_save_flag = False
-                        self.ivs_threshold_class.ivs_save_folder = None
-                        self.ivs_threshold_class.ivs_save_msg_box()
-                        
+                if (os.path.exists(f)) == True:
+                    self.obj_cam_operation.set_custom_save_param(folder_name, file_name, overwrite_bool = True)
                 else:
-                    if (os.path.exists(f)) == True:
-                        self.obj_cam_operation.set_custom_save_param(folder_name, file_name, overwrite_bool = True)
-                    else:
-                        self.obj_cam_operation.set_custom_save_param(folder_name, file_name, overwrite_bool = False)
+                    self.obj_cam_operation.set_custom_save_param(folder_name, file_name, overwrite_bool = False)
 
-                    self.obj_cam_operation.custom_b_save = True
-                    self.obj_cam_operation.b_save = False
-                    self.obj_cam_operation.img_save_flag = False
-                    self.obj_cam_operation.img_save_folder = None
-                    self.img_save_msg_box()
+                self.obj_cam_operation.custom_b_save = True
+                self.obj_cam_operation.b_save = False
+                self.obj_cam_operation.img_save_flag = False
+                self.obj_cam_operation.img_save_folder = None
+                self.img_save_msg_box()
 
-                    self.obj_cam_operation.Trigger_Mode_Save()
+                self.obj_cam_operation.Trigger_Mode_Save()
             
 
     def img_save_msg_box(self):
@@ -3880,14 +3473,10 @@ class Hikvision_GUI(tk.Frame):
         if isinstance(pixel_str_id, str) == True:
             self.pixel_format_combobox.current(self.pixel_format_list.index(pixel_str_id))
 
-            #### Update the Ivs Threshold Tool GUI (28-2-2022)
             if self.obj_cam_operation.Pixel_Format_Mono(pixel_str_id) == True:
-                self.ivs_threshold_class.pixel_format_switch('mono')
                 self.popout_ch_sel_btn_state(rgb_bool = False)
 
-
             elif self.obj_cam_operation.Pixel_Format_Color(pixel_str_id) == True:
-                self.ivs_threshold_class.pixel_format_switch('rgb')
                 self.popout_ch_sel_btn_state(rgb_bool = True)
 
 
@@ -3934,12 +3523,10 @@ class Hikvision_GUI(tk.Frame):
         if hex_id is not None:
             ret_flag = self.obj_cam_operation.Set_Pixel_Format(hex_id)
             if ret_flag == 0:
-                #### Update the Ivs Threshold Tool GUI (28-2-2022)
+
                 if self.obj_cam_operation.Pixel_Format_Mono(_pixel_format) == True:
-                    self.ivs_threshold_class.pixel_format_switch('mono')
                     self.popout_ch_sel_btn_state(rgb_bool = False)
 
                 elif self.obj_cam_operation.Pixel_Format_Color(_pixel_format) == True:
-                    self.ivs_threshold_class.pixel_format_switch('rgb')
                     self.popout_ch_sel_btn_state(rgb_bool = True)
                     

@@ -16,10 +16,6 @@ from tkinter.font import Font
 from PIL import Image, ImageTk, ImageGrab, ImageDraw
 from collections import Counter
 
-from tesserocr import get_languages
-from tesserocr import PyTessBaseAPI, PSM, OEM, RIL
-import tesserocr
-
 import time
 
 import re
@@ -43,7 +39,7 @@ class CanvasImage():
     # Image.MAX_IMAGE_PIXELS = 1000000000  # suppress DecompressionBombError for the big image
     Image.MAX_IMAGE_PIXELS = None  # suppress DecompressionBombError for the big image
     """ Display and zoom image """
-    def __init__(self, placeholder, loaded_img = None, local_img_split = False, ch_index = 0, tess_api = None): 
+    def __init__(self, placeholder, loaded_img = None, local_img_split = False, ch_index = 0): 
         """ Initialize the ImageFrame """
         self.imscale = 1.0  # scale for the canvas image zoom, public for outer classes
         self.delta = 1.3  # zoom magnitude
@@ -80,86 +76,6 @@ class CanvasImage():
         self.roi_line_exist = False
 
         self.text_font = Font(family="Times New Roman", size=10)
-        # print(tesserocr.tesseract_version())
-        self.tess_api = tess_api #None
-        # print(self.tess_api.oem())
-        '''
-        tess_dependency_path = os.getcwd() + '\\tessdata' #'C:\\Users\\User\\AppData\\Local\\Programs\\Tesseract-OCR\\tessdata'
-        # print(tess_dependency_path)
-        get_languages(tess_dependency_path)
-        lang_param = 'eng' #'fra' #'eng'
-        psm_param = PSM.SINGLE_BLOCK #PSM.SINGLE_CHAR #PSM.SINGLE_CHAR
-        oem_param = OEM.TESSERACT_LSTM_COMBINED
-
-        # self.tess_api = PyTessBaseAPI(path = tess_dependency_path
-        #     , lang = lang_param
-        #     , psm = psm_param, oem = oem_param)
-
-        # print(dir(self.tess_api))
-
-        self.Tesseract_API_load(tess_dependency_path, lang_param, psm_param, oem_param)
-        '''
-        #GOOD RESULTS tested so far: SINGLE BLOCK, SINGLE_CHAR
-
-        """psm = An enum that defines all available page segmentation modes.
-        Attributes:
-            OSD_ONLY: Orientation and script detection only.
-            AUTO_OSD: Automatic page segmentation with orientation and script detection. (OSD)
-            AUTO_ONLY: Automatic page segmentation, but no OSD, or OCR.
-            AUTO: Fully automatic page segmentation, but no OSD. (:mod:`tesserocr` default)
-            SINGLE_COLUMN: Assume a single column of text of variable sizes.
-            SINGLE_BLOCK_VERT_TEXT: Assume a single uniform block of vertically aligned text.
-            SINGLE_BLOCK: Assume a single uniform block of text.
-            SINGLE_LINE: Treat the image as a single text line.
-            SINGLE_WORD: Treat the image as a single word.
-            CIRCLE_WORD: Treat the image as a single word in a circle.
-            SINGLE_CHAR: Treat the image as a single character.
-            SPARSE_TEXT: Find as much text as possible in no particular order.
-            SPARSE_TEXT_OSD: Sparse text with orientation and script det.
-            RAW_LINE: Treat the image as a single text line, bypassing hacks that are Tesseract-specific.
-            COUNT: Number of enum entries.
-        """
-
-        """oem: An enum that defines available OCR engine modes.
-        Attributes:
-            TESSERACT_ONLY: Run Tesseract only - fastest
-            LSTM_ONLY: Run just the LSTM line recognizer. (>=v4.00)
-            TESSERACT_LSTM_COMBINED: Run the LSTM recognizer, but allow fallback
-                to Tesseract when things get difficult. (>=v4.00)
-            CUBE_ONLY: Specify this mode when calling Init*(), to indicate that
-                any of the above modes should be automatically inferred from the
-                variables in the language-specific config, command-line configs, or
-                if not specified in any of the above should be set to the default
-                `OEM.TESSERACT_ONLY`.
-            TESSERACT_CUBE_COMBINED: Run Cube only - better accuracy, but slower.
-            DEFAULT: Run both and combine results - best accuracy.
-        """
-
-        ###################################################################################################
-        # IVS Parameter Array(s):
-        self.ivs_start_bool = False
-        self.ivs_threshold_bool = False
-
-        self.process_cancel = False
-
-        self.ivs_th_param = np.empty((4,), dtype = object)
-        self.ivs_th_param[0] = np.array([0, 0, 255], dtype = np.uint8) #Mono: simple th, double th lower, double th upper
-        self.ivs_th_param[1] = np.array([0, 0, 255], dtype = np.uint8) #Red: simple th, double th lower, double th upper
-        self.ivs_th_param[2] = np.array([0, 0, 255], dtype = np.uint8) #Green: simple th, double th lower, double th upper
-        self.ivs_th_param[3] = np.array([0, 0, 255], dtype = np.uint8) #Blue: simple th, double th lower, double th upper
-
-
-        self.ivs_blob_param = np.zeros((5),dtype=np.uint32) #index:- 0: min blob size, 1: max blob size, 2: lower threshold, 3: upper threshold, 4: bbox outline
-        self.ivs_ocr_label_param = np.zeros((3),dtype=np.int32) #index:- 0: shift_x, 1: shift_y, 2: font size, 3: font thickness
-
-        self.np_arr_blob_init()
-        self.np_arr_ocr_init()
-
-
-        self.__ivs_bbox_func_dict = {} ### Dictionary to store callable/function objects
-        ### Init self.__ivs_bbox_func_dict
-        self.__ivs_bbox_func_dict['Gain'] = []
-        self.__ivs_bbox_func_dict['Threshold'] = []
 
         ###################################################################################################
         self.container = None
@@ -690,10 +606,6 @@ class CanvasImage():
             self.roi_bbox_exist =  False
             self.ivs_mode = ivs_mode
 
-            if isinstance(func_list, list) == True:
-                self.__ivs_bbox_func_dict[str(self.ivs_mode)] = None
-                self.__ivs_bbox_func_dict[str(self.ivs_mode)] = func_list
-
             _enable_status = True
 
         return _enable_status
@@ -716,25 +628,6 @@ class CanvasImage():
                 _cam_class = main_GUI.class_cam_conn.active_gui
                 _cam_class.histogram_stop_auto_update()
                 _cam_class.profile_stop_auto_update()
-                if self.ivs_start_bool == True:
-                    self.process_cancel = True
-                    try:
-                        ivs_class = _cam_class.ivs_tesseract_class
-                        ivs_class.blob_num_detect_var.set(0)
-                        ivs_class.blob_num_detect_label['fg'] = 'black'
-                    except (AttributeError, tk.TclError):
-                        pass
-                    # _cam_class.IVS_delete_tk_draw()
-                    try:
-                        _cam_class.ivs_tesseract_class.IVS_delete_tk_draw()
-                    except (AttributeError, tk.TclError):
-                        pass
-                    
-
-            if self.ivs_mode == 'IVS-Blob':
-                from main_GUI import main_GUI
-                _imgproc_class = main_GUI.class_imgproc_gui
-                _imgproc_class.ivs_ocr_win.IVS_OCR_clear()
 
 
         if self.roi_item is not None:
@@ -808,30 +701,13 @@ class CanvasImage():
                     self.roi_bbox_label =\
                         self.canvas.create_text(roi_label_x, roi_label_y, activefill = "red", fill="yellow", font = 'Helvetica', anchor = 'sw', text = 'ROI Size: ' + str(roi_size) + ' pix.')
 
-                if self.ivs_mode == 'Gain':
-                    if self.ivs_mode in self.__ivs_bbox_func_dict:
-                        for func_obj in self.__ivs_bbox_func_dict[self.ivs_mode]:
-                            if callable(func_obj) == True:
-                                func_obj()
 
-                elif self.ivs_mode == 'Camera':
+                if self.ivs_mode == 'Camera':
                     from main_GUI import main_GUI
                     _cam_class = main_GUI.class_cam_conn.active_gui
                     if _cam_class.curr_graph_view == 'histogram':
                         _cam_class.histogram_auto_update()
 
-                elif self.ivs_mode == 'IVS-Blob':
-                    # print(self.ivs_mode)
-                    from main_GUI import main_GUI
-                    _imgproc_class = main_GUI.class_imgproc_gui
-                    _imgproc_class.ivs_ocr_win.IVS_OCR_func()
-
-                elif self.ivs_mode == 'Threshold':
-                    # print(self.__ivs_bbox_func_dict)
-                    if self.ivs_mode in self.__ivs_bbox_func_dict:
-                        for func_obj in self.__ivs_bbox_func_dict[self.ivs_mode]:
-                            if callable(func_obj) == True:
-                                func_obj()
 
     def ROI_box_pixel_update(self):
         # print(self.ivs_mode)
@@ -896,10 +772,6 @@ class CanvasImage():
             self.ROI_line_param_init()
             self.roi_line_exist = False
             self.ivs_mode = ivs_mode
-
-            if isinstance(func_list, list) == True:
-                self.__ivs_bbox_func_dict[str(self.ivs_mode)] = None
-                self.__ivs_bbox_func_dict[str(self.ivs_mode)] = func_list
 
             _enable_status = True
 
@@ -1012,13 +884,7 @@ class CanvasImage():
             #print(self.roi_line_pixel_mono)
             #print(self.roi_line_pixel_index)
 
-            if self.ivs_mode == 'Gain':
-                if self.ivs_mode in self.__ivs_bbox_func_dict:
-                    for func_obj in self.__ivs_bbox_func_dict[self.ivs_mode]:
-                        if callable(func_obj) == True:
-                            func_obj()
-
-            elif self.ivs_mode == 'Camera':
+            if self.ivs_mode == 'Camera':
                 from main_GUI import main_GUI
                 _cam_class = main_GUI.class_cam_conn.active_gui
                 if _cam_class.curr_graph_view == 'histogram':
@@ -1026,13 +892,6 @@ class CanvasImage():
 
                 elif _cam_class.curr_graph_view == 'profile':
                     _cam_class.profile_auto_update()
-
-            elif self.ivs_mode == 'Threshold':
-                # print(self.__ivs_bbox_func_dict)
-                if self.ivs_mode in self.__ivs_bbox_func_dict:
-                    for func_obj in self.__ivs_bbox_func_dict[self.ivs_mode]:
-                        if callable(func_obj) == True:
-                            func_obj()
 
             del ref_img
             
@@ -1100,422 +959,3 @@ class CanvasImage():
                 sort_arr = sort_arr[::-1]
 
         return sort_arr
-
-    ###################################################################################################################
-    #IVS FUNCTIONS
-    def np_arr_blob_init(self):
-        self.ivs_blob_param[0] = 100 #min size
-        self.ivs_blob_param[1] = 1000 #max size
-        self.ivs_blob_param[2] = 0 #lower th
-        self.ivs_blob_param[3] = 0 #upper th
-        self.ivs_blob_param[4] = 2 #bbox outline
-
-    def np_arr_ocr_init(self):
-        self.ivs_ocr_label_param[0] = 0 #shift x
-        self.ivs_ocr_label_param[1] = 0 #shift y
-        self.ivs_ocr_label_param[2] = 18 #font size
-
-    def Check_Tesseract_API(self):
-        return isinstance(self.tess_api, PyTessBaseAPI)
-
-    def Tesseract_API_load(self, tessdata_path = os.getcwd() + '\\tessdata', lang = 'eng', psm = PSM.SINGLE_BLOCK, oem = OEM.TESSERACT_LSTM_COMBINED):
-        # print('tessdata_path, lang, psm, oem: ', tessdata_path, lang, psm, oem)
-        # print(dir(PyTessBaseAPI))
-        if isinstance(self.tess_api, PyTessBaseAPI) == False:
-            try:
-                os.environ['OMP_THREAD_LIMIT'] = '1' ## Comment: Limit OpenMP number of threads
-                get_languages(tessdata_path)
-                self.tess_api = PyTessBaseAPI(path = tessdata_path
-                    , lang = lang
-                    , psm = psm, oem = oem)
-            except Exception:
-                del self.tess_api
-                self.tess_api = None
-
-        elif isinstance(self.tess_api, PyTessBaseAPI) == True:
-            try:
-                self.tess_api.End()
-                os.environ['OMP_THREAD_LIMIT'] = '1' ## Comment: Limit OpenMP number of threads
-                get_languages(tessdata_path)
-                self.tess_api = PyTessBaseAPI(path = tessdata_path
-                    , lang = lang
-                    , psm = psm, oem = oem)
-
-            except Exception:
-                del self.tess_api
-                self.tess_api = None
-
-        return self.tess_api
-
-
-    def ROI_Box_Blob_Morphology(self, morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list, _img = None):
-        # print(morph_data_dict)
-        # print(morph_widget_name_list)
-        if type(morph_data_dict) == dict:
-            if len(morph_data_dict) > 0 and _img is not None and (isinstance(_img, np.ndarray)) == True:
-                name_list = morph_widget_name_list
-                try:
-                    for _, data in morph_data_dict.items():
-                        if self.ivs_start_bool == False:
-                            break
-                        if self.process_cancel == True:
-                            # print('Process Interrupt: ROI_Box_Blob_Morphology')
-                            break
-
-                        tk_widget = data[0]
-                        morph_type = data[1]
-
-                        morph_kernel = None
-                        kernel_size = None
-                        # print(tk_widget)
-                        # print(morph_type)
-                        # print(tk_widget[name_list[2]])
-                        # print(tk_widget[name_list[1]])
-                        try:
-                            kernel_size = int(tk_widget[name_list[2]].get())
-                        except Exception:
-                            kernel_size = None
-
-                        if kernel_size is None:
-                            continue
-
-                        kernel_type = tk_widget[name_list[1]].get()
-
-                        # print(kernel_size, kernel_type)
-
-                        if kernel_type == kernel_type_list[0]:
-                            morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(kernel_size, kernel_size))
-
-                        elif kernel_type == kernel_type_list[1]:
-                            morph_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernel_size, kernel_size))
-
-                        elif kernel_type == kernel_type_list[2]:
-                            morph_kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(kernel_size, kernel_size))
-                        # print(kernel_size)
-
-                        # print(morph_kernel)
-
-                        if morph_kernel is not None and morph_type_list is not None:
-                            if morph_type == morph_type_list[0]:
-                                _img = cv2.dilate(_img, morph_kernel, iterations = 1)
-
-                            elif morph_type == morph_type_list[1]:
-                                _img = cv2.erode(_img, morph_kernel, iterations = 1)
-
-                            elif morph_type == morph_type_list[2]:
-                                _img = cv2.morphologyEx(_img, cv2.MORPH_CLOSE, morph_kernel)
-
-                            elif morph_type == morph_type_list[3]:
-                                _img = cv2.morphologyEx(_img, cv2.MORPH_OPEN, morph_kernel)
-
-
-                except Exception as e:
-                    print('Exception, ROI_Box_Blob_Morphology error: ', e)
-                    return _img            
-                
-                return _img
-
-        return _img
-
-    def opencv_blob_binarize(self, gray_img, th_lo_val, th_hi_val, black_on_white = True
-        , morph_data_dict = None, morph_widget_name_list = None, morph_type_list = None, kernel_type_list = None):
-
-        if len(gray_img.shape) == 2:
-            bin_img = cv2.inRange(gray_img, th_lo_val, th_hi_val)
-            #pixel values between th_lo_val and th_hi_val will be binarize to 255.
-            # morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,10))
-
-            if th_lo_val == th_hi_val:
-                bin_img[:] = 0
-
-            #cnt_img: to find the blob using open-cv contour
-            #out_img: to find the apply tesseract OCR. 
-            #While tesseract version 3.05 (and older) handle inverted image (dark background and light text) without problem, for 4.x version use dark text on light background.
-
-            if black_on_white == False: # input img is white foreground, black background
-                bin_img = cv2.bitwise_not(bin_img)
-                ################################################################################
-                #MORPHOLOGY OPERATION (ADDED 13-9-2021)
-                if morph_data_dict is not None and type(morph_data_dict) == dict:
-                    if len(morph_data_dict) > 0:
-                        bin_img = self.ROI_Box_Blob_Morphology(morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list, bin_img)
-                ################################################################################
-                cnt_img = bin_img.copy()
-                out_img = bin_img.copy()
-                # out_img = cv2.bitwise_not(bin_img) 
-
-            elif black_on_white == True: # input img is black foreground, white background
-                ################################################################################
-                #MORPHOLOGY OPERATION (ADDED 13-9-2021)
-                if morph_data_dict is not None and type(morph_data_dict) == dict:
-                    if len(morph_data_dict) > 0:
-                        bin_img = self.ROI_Box_Blob_Morphology(morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list, bin_img)
-                ################################################################################
-                cnt_img = bin_img.copy()
-                out_img = bin_img.copy()
-                # out_img = cv2.bitwise_not(bin_img)
-
-            # cv2.imshow('cnt_img', cnt_img)
-            # cv2.imshow('out_img', out_img)
-            return cnt_img, out_img
-
-        else:
-            return None, None
-
-    def opencv_blob_search(self, cnt_img, bin_img):
-        blob_bbox = []
-        out_cnt = []
-        if isinstance(cnt_img, np.ndarray) == True and isinstance(bin_img, np.ndarray) == True:
-            contours = cv2.findContours(cnt_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # contours = cv2.findContours(cnt_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            cnts = contours[0] if len(contours) == 2 else contours[1]
-            out_img = np.zeros([bin_img.shape[0], bin_img.shape[1]],"uint8")
-            # print('----------------------\nContour Found~\n', len(cnts))
-            # cv2.drawContours(out_img, cnts, -1, 255, -1)
-            # print(len(cnts))
-            if len(cnts) > 5000:
-                out_img = bin_img
-                del blob_bbox
-                blob_bbox = None
-
-            else:
-                for cnt in cnts:
-                    if self.ivs_start_bool == False:
-                        break
-                    if self.process_cancel == True:
-                        # print('Process Interrupt: opencv_blob_search')
-                        break
-                    x,y,w,h = cv2.boundingRect(cnt)
-
-                    pix_size = np.multiply(w, h)
-
-                    if self.ivs_blob_param[0] <= pix_size <= self.ivs_blob_param[1]:
-                        out_cnt.append(cnt)
-                        blob_bbox.append((x,y,x + w, y + h))
-
-                # print(len(blob_bbox))
-                if 0 < len(blob_bbox) <= 1000:
-                    cv2.drawContours(out_img, out_cnt, -1, 255, -1)
-                    out_img = cv2.bitwise_and(out_img, bin_img)
-                    
-                    pass
-                elif len(blob_bbox) == 0:
-                    out_img = bin_img
-                    pass
-                else:
-                    out_img = bin_img
-                    del blob_bbox
-                    blob_bbox = None
-
-            # cv2.imshow('Contour', out_img)
-        
-        return blob_bbox, out_img
-
-
-    def ROI_Box_Blob(self, roi_img = None, black_on_white = True, morph_data_dict = None, morph_widget_name_list = None, morph_type_list = None, kernel_type_list = None):
-        # blob_results = None
-        # print(roi_img)
-        if self.roi_bbox_exist == True:
-            if (int(self.ivs_blob_param[3]) < int(self.ivs_blob_param[2])) \
-            or (int(self.ivs_blob_param[1]) < int(self.ivs_blob_param[0])):
-                pass
-
-            else:
-                if len(roi_img.shape) == 2:
-                    gray_img = roi_img
-
-                    cnt_img, bin_img = self.opencv_blob_binarize(gray_img, int(self.ivs_blob_param[2]), int(self.ivs_blob_param[3]), black_on_white
-                        , morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list)
-
-                    # cv2.imshow('Bin img', bin_img)
-
-                    blob_bbox, bin_img = self.opencv_blob_search(cnt_img, bin_img)
-
-                    #While tesseract version 3.05 (and older) handle inverted image (dark background and light text) without problem, for 4.x version use dark text on light background.
-                    bin_img = cv2.bitwise_not(bin_img)
-
-                    return bin_img, blob_bbox
-
-                elif len(roi_img.shape) > 2:
-                    if roi_img.shape[2] == 3:
-                        gray_img = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-
-                        cnt_img, bin_img = self.opencv_blob_binarize(gray_img, int(self.ivs_blob_param[2]), int(self.ivs_blob_param[3]), black_on_white
-                            , morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list)
-
-                        blob_bbox, bin_img = self.opencv_blob_search(cnt_img, bin_img)
-
-                        #While tesseract version 3.05 (and older) handle inverted image (dark background and light text) without problem, for 4.x version use dark text on light background.
-                        bin_img = cv2.bitwise_not(bin_img)
-
-                        return bin_img, blob_bbox
-
-                    elif roi_img.shape[2] == 4:
-                        gray_img = cv2.cvtColor(roi_img, cv2.COLOR_BGRA2GRAY)
-                        
-                        cnt_img, bin_img = self.opencv_blob_binarize(gray_img, int(self.ivs_blob_param[2]), int(self.ivs_blob_param[3]), black_on_white
-                            , morph_data_dict, morph_widget_name_list, morph_type_list, kernel_type_list)
-
-                        blob_bbox, bin_img = self.opencv_blob_search(cnt_img, bin_img)
-
-                        #While tesseract version 3.05 (and older) handle inverted image (dark background and light text) without problem, for 4.x version use dark text on light background.
-                        bin_img = cv2.bitwise_not(bin_img)
-
-                        return bin_img, blob_bbox
-
-        return None, None
-
-    def ROI_Box_Tess_OCR(self, input_img, ocr_result, canvas_offset_y, ocr_timeout = 0, ocr_index = 0, confidence_enable = True):
-        if isinstance(self.tess_api, PyTessBaseAPI) == True:
-            try:
-                self.tess_api.Clear()
-                if self.ivs_start_bool == True and self.process_cancel == False:
-                    # self.tess_api.Clear()
-                    _data_list = []
-                    pil_img = Image.fromarray(input_img)
-                    self.tess_api.SetImage(pil_img)
-                    # print(str(self.tess_api.GetUTF8Text()))
-                    level = RIL.SYMBOL
-                    """
-                    RIL MODE:
-                    RIL.SYMBOL #for Symbol/character within a word
-                    RIL.BLOCK #for Block of text/image/separator line
-                    RIL.PARA #for Paragraph within a block
-                    RIL.TEXTLINE #for Line within a paragraph
-                    RIL.WORD #for Word within a textline
-                    """
-                    # print('Recognize Start...', 'timeout: ', ocr_timeout)
-                    self.tess_api.Recognize(ocr_timeout) #This is time consuming if binary image has various pixel noise.
-                    #Recognize parameter: timeout(msec)
-                    # print('Recognize Done...')
-
-                    ri = self.tess_api.GetIterator()
-                    # print(dir(ri))
-
-                    if confidence_enable == True:
-                        _confidence = ri.Confidence(level)
-                        # print('confidence threshold: ', _confidence)
-                        if float(_confidence) >= 85:
-                            boxes = ri.BoundingBox(level)
-                            _ocr_str = ri.GetUTF8Text(level)
-                            _ocr_str = re.sub("[\s\n\r]+", "", _ocr_str)
-                            # print(_ocr_str, _confidence, np.multiply(boxes[2] - boxes[0], boxes[3] - boxes[1]))
-                            if _ocr_str != '':
-                                _data_list.append([_ocr_str, boxes])
-
-                    elif confidence_enable == False:
-                        _ocr_str = ri.GetUTF8Text(level)
-                        _ocr_str = re.sub("[\s\n\r]+", "", _ocr_str)
-                        boxes = ri.BoundingBox(level)
-                        if _ocr_str != '':
-                            _data_list.append([_ocr_str, boxes])
-
-                    while(ri.Next(level)):
-                        if self.ivs_start_bool == False:
-                            break
-                        if self.process_cancel == True:
-                            # print('Process Interrupt: ROI_Box_Tess_OCR')
-                            break
-                        if confidence_enable == True:
-                            _confidence = ri.Confidence(level)
-                            if float(_confidence) >= 85:
-                                boxes = ri.BoundingBox(level)
-                                _ocr_str = ri.GetUTF8Text(level)
-                                _ocr_str = re.sub("[\s\n\r]+", "", _ocr_str)
-                                # print(_ocr_str, _confidence, np.multiply(boxes[2] - boxes[0], boxes[3] - boxes[1]))
-                                if _ocr_str != '':
-                                    _data_list.append([_ocr_str, boxes])
-
-                        elif confidence_enable == False:
-                            _ocr_str = ri.GetUTF8Text(level)
-                            _ocr_str = re.sub("[\s\n\r]+", "", _ocr_str)
-                            boxes = ri.BoundingBox(level)
-                            if _ocr_str != '':
-                                _data_list.append([_ocr_str, boxes])
-
-                    # print('detected ocr lst: ', _data_list)
-                    if len(_data_list) == 0:
-                        return None
-
-                    elif len(_data_list) > 0:
-                        for _data in _data_list:
-                            if self.ivs_start_bool == False:
-                                break
-                            if self.process_cancel == True:
-                                # print('Process Interrupt: ROI_Box_Tess_OCR')
-                                break
-                            dict_id = 'id ' + str(ocr_index)
-                            ocr_result[dict_id] = [_data[0], 
-                            ( int(_data[1][0]), int(_data[1][1]), int(_data[1][2]), int(_data[1][3]) )]
-                            ocr_index = ocr_index + 1
-
-                        # print(ocr_result)
-                        return ocr_result
-
-
-                else:
-                    return None
-            except Exception:# as e:
-                # print('Exception ROI_Box_Tess_OCR: ', e)
-                return None
-
-        else:
-            return None
-
-
-    def Draw_Blob_Detection(self, blob_results = None, canvas_offset_x = 0, canvas_offset_y = 0, imscale = 1, img_offset_x = 0, img_offset_y = 0):
-        if self.roi_bbox_exist == True:
-            if blob_results is not None and type(blob_results) == list:
-                if len(blob_results) > 0:
-                    blob_bbox_tk_list = []
-                    blob_number = int(len(blob_results))
-
-                    for index in range(blob_number):
-                        if self.ivs_start_bool == False:
-                            break
-                        if self.process_cancel == True:
-                            break
-                        start_coor = (int(blob_results[index][0] + canvas_offset_x), int(blob_results[index][1] + canvas_offset_y))
-                        end_coor = (int(blob_results[index][2] + canvas_offset_x), 
-                            int(blob_results[index][3] + canvas_offset_y))
-
-                        box_x1 = np.multiply(start_coor[0], imscale) + img_offset_x
-                        box_y1 = np.multiply(start_coor[1], imscale) + img_offset_y
-                        box_x2 = np.multiply(end_coor[0], imscale) + img_offset_x
-                        box_y2 = np.multiply(end_coor[1], imscale) + img_offset_y
-
-                        canvas_blob_bbox = (box_x1, box_y1, box_x2, box_y2)
-                        try:
-                            self.canvas.create_rectangle(canvas_blob_bbox, outline="red", width = self.ivs_blob_param[4], tags = 'blob_box')
-                        except (AttributeError, tk.TclError):# as e:
-                            #print('Error Draw_Blob_Detection: ', e)
-                            pass
-
-
-    def Tess_Draw_OCR_Tag(self, ocr_result = None, canvas_offset_x = 0, canvas_offset_y = 0, imscale = 1, img_offset_x = 0, img_offset_y = 0):
-        if (ocr_result is not None and type(ocr_result) == dict):
-            if len(ocr_result) > 0:
-                
-                font_size = str(self.ivs_ocr_label_param[2])
-                self.text_font.configure(size= int(font_size))
-
-                for _, ocr_data in ocr_result.items():
-                    if self.ivs_start_bool == False:
-                        break
-                    if self.process_cancel == True:
-                        break
-
-                    midpoint_x = np.multiply(0.7, (ocr_data[1][2] - ocr_data[1][0]))
-
-                    text_x = np.multiply(ocr_data[1][0] + midpoint_x + canvas_offset_x + self.ivs_ocr_label_param[0]
-                        , imscale) + img_offset_x
-
-                    text_y = np.multiply(ocr_data[1][3] + canvas_offset_y + self.ivs_ocr_label_param[1]
-                        , imscale) + img_offset_y
-
-                    try:
-                        self.canvas.create_text(text_x, text_y, fill="red", font = self.text_font, anchor = 'n', text = ocr_data[0], tags = 'ocr_tag')
-                    except (AttributeError, tk.TclError):# as e:
-                        # print('Error Tess_Draw_OCR_Tag: ', e)
-                        pass
-

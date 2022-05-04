@@ -21,9 +21,16 @@ def include_dir(mydir):
 
     return extra_data
 
-folder_list = ['Tk_MsgBox', 'TMS Icon', 'TMS_Web_Resources', 'report src', 'Font', 'TMS_Saved_Images'
-, 'TMS_Saved_Reports', 'tessdata', 'DEPENDENCIES', 'LC-18 Picture GUI', 'mpl-data'
-, 'MVS-Python']
+folder_list = ['Tk_MsgBox', 'TMS Icon', 'TMS_Web_Resources', 'report src', 'Font'
+, 'tessdata', 'DEPENDENCIES', 'LC-18 Picture GUI', 'mpl-data'
+, 'MVS-Python'
+, 'Light_Module'
+, 'Cam_Module'
+, 'Report_Module'
+, 'WebSrc_Module'
+, 'Tk_Validate'
+, 'Tk_Custom_Widget'
+, 'misc_module']
 
 def include_file(file_path):
   import re
@@ -35,13 +42,13 @@ def include_file(file_path):
   return file_data
 
 
-file_list = [spec_root + '\\LC20Library.dll', spec_root + '\\LC18Library.dll', spec_root + '\\UsbLibrary.dll', spec_root + '\\VirtualFG40.dll']
+file_list = [spec_root + '\\LC20Library.dll', spec_root + '\\LC18Library.dll', spec_root + '\\UsbLibrary.dll']
 
 a = Analysis(['TMS_Lite_Software_Python.py'],
-             pathex=[],
+             pathex=[spec_root],
              binaries=[],
              datas=[],
-             hiddenimports=[],
+             hiddenimports=['fontTools.ttLib'],
              hookspath=[],
              runtime_hooks=[],
              excludes=['shiboken2', 'PySide2', 'skimage', 'scipy'],
@@ -62,7 +69,7 @@ exe = EXE(pyz,
           a.scripts,
           [],
           exclude_binaries=True,
-          name='TMS-Lite Software',
+          name='TMS-Lite-Software-General',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,

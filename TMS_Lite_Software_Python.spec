@@ -22,7 +22,7 @@ def include_dir(mydir):
     return extra_data
 
 folder_list = ['Tk_MsgBox', 'TMS Icon', 'TMS_Web_Resources', 'report src', 'Font'
-, 'tessdata', 'DEPENDENCIES', 'LC-18 Picture GUI', 'mpl-data'
+, 'DEPENDENCIES', 'LC-18 Picture GUI'
 , 'MVS-Python'
 , 'Light_Module'
 , 'Cam_Module'
@@ -48,7 +48,7 @@ a = Analysis(['TMS_Lite_Software_Python.py'],
              pathex=[spec_root],
              binaries=[],
              datas=[],
-             hiddenimports=['fontTools.ttLib'],
+             hiddenimports=['fontTools.ttLib', 'pandas', 'requests'],
              hookspath=[],
              runtime_hooks=[],
              excludes=['shiboken2', 'PySide2', 'skimage', 'scipy'],

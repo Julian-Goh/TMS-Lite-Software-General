@@ -7,7 +7,7 @@ import os
 from os import path
 
 import pathlib
-from Tk_Validate.tk_validate import *
+from number_check import *
 
 def img_resize_dim(ori_W, ori_H, new_W = None, new_H = None):
     if new_W is not None and new_H is None:

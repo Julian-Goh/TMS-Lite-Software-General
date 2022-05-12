@@ -8,7 +8,6 @@ import copy
 from datetime import datetime
 
 import tkinter as tk
-from tkinter import ttk
 from tkinter import filedialog
 
 import threading
@@ -22,12 +21,14 @@ import cv2
 
 import numpy as np
 from functools import partial
+import traceback
 
 import io
 import openpyxl
 from openpyxl import load_workbook
 
 from tk_openpyxl import XL_WorkBook, xl_read_worksheet, custom_col_char_dict, xl_col_label_num, set_outer_border, xl_unmerge_cell
+import tk_opencsv
 
 from Tk_MsgBox.custom_msgbox import Ask_Msgbox, Info_Msgbox, Error_Msgbox, Warning_Msgbox
 
@@ -108,7 +109,6 @@ def remove_key(ref_dict, del_key): #Removing a key & element from a dictionary-t
 def character_limit(tk_str_var, limit):
     if len(tk_str_var.get()) > 0:
         tk_str_var.set(tk_str_var.get()[:limit])
-
 
 def group_print(*args, **kwargs):
     for arg in args:
@@ -217,7 +217,9 @@ class Report_GUI(tk.Frame):
                                 , refresh_icon = None
                                 , text_icon = None
                                 , window_icon = None
-                                , folder_icon = None)
+                                , folder_icon = None
+                                , reset_icon = None
+                                , clipboard_icon = None)
 
         for key, item in gui_graphic.items():
             if key in self.gui_graphic:
@@ -235,6 +237,8 @@ class Report_GUI(tk.Frame):
 
         self.toggle_ON_btn_img  = to_tk_img(pil_img_resize(self.gui_graphic['toggle_ON_btn_img'], img_scale = 0.06))
         self.toggle_OFF_btn_img = to_tk_img(pil_img_resize(self.gui_graphic['toggle_OFF_btn_img'], img_scale = 0.06))
+        self.reset_icon         = to_tk_img(pil_img_resize(self.gui_graphic['reset_icon'], img_width = 25, img_height = 25))
+        self.clipboard_icon     = to_tk_img(pil_img_resize(self.gui_graphic['clipboard_icon'], img_width = 25, img_height = 25))
 
 
         self.thread_handle = None
@@ -246,6 +250,9 @@ class Report_GUI(tk.Frame):
 
         self.err_msgbox_handle_2 = None #File is Currently Opened in Microsoft Excel
         self.err_msgbox_flag_2 = False
+
+        self.err_msgbox_handle_3 = None #Exception Error in the Algorithm
+        self.err_msgbox_flag_3 = False
 
         self.info_msgbox_handle = None
         self.info_msgbox_flag = False
@@ -260,6 +267,7 @@ class Report_GUI(tk.Frame):
         
         self.__im_curr_dir = os.path.join(os.environ['USERPROFILE'],  "TMS_Saved_Images")
         self.__report_curr_dir = os.path.join(os.environ['USERPROFILE'], "TMS_Saved_Reports")
+        self.__csv_curr_dir = os.environ['USERPROFILE']
 
         self.xl_class = XL_WorkBook()
         self.xl_worksheet_name = 'Sheet'
@@ -413,29 +421,32 @@ class Report_GUI(tk.Frame):
 
     def check_entry_edit(self, tk_event, ref_arr_index, tk_var, edit_dict_key = None):
         ## CHECK REPORT DETAIL ENTRIES TO SEE IF IT IS EDITTED/CHANGED
-        if tk_event.keysym == 'Left' or tk_event.keysym == 'Right' or tk_event.keysym == 'Up' or tk_event.keysym == 'Down' or tk_event.keysym == 'Tab':
+        try:
+            if tk_event.keysym == 'Left' or tk_event.keysym == 'Right' or tk_event.keysym == 'Up' or tk_event.keysym == 'Down' or tk_event.keysym == 'Tab':
+                return
+        except Exception:
             pass
-        else:
-            if edit_dict_key in self.edit_data_dict:
-                ref_data = self.edit_data_dict[edit_dict_key][2][ref_arr_index]
-                if ref_data is not None:
-                    if tk_var.get() != ref_data:
-                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
 
-                    elif tk_var.get() == ref_data:
-                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
+        if edit_dict_key in self.edit_data_dict:
+            ref_data = self.edit_data_dict[edit_dict_key][2][ref_arr_index]
+            if ref_data is not None:
+                if tk_var.get() != ref_data:
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
+
+                elif tk_var.get() == ref_data:
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
+            else:
+                if tk_var.get() == '':
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
                 else:
-                    if tk_var.get() == '':
-                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = False
-                    else:
-                        self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
+                    self.edit_data_dict[edit_dict_key][1][ref_arr_index] = True
 
-                id_num = self.edit_data_dict[edit_dict_key][0]
-                self.track_edit_bool_arr[id_num] = np.any(self.edit_data_dict[edit_dict_key][1])
-                # print(self.track_edit_bool_arr, np.any(self.track_edit_bool_arr))
-                # print('check_entry_edit: ', self.track_edit_bool_arr)
+            id_num = self.edit_data_dict[edit_dict_key][0]
+            self.track_edit_bool_arr[id_num] = np.any(self.edit_data_dict[edit_dict_key][1])
+            # print(self.track_edit_bool_arr, np.any(self.track_edit_bool_arr))
+            # print('check_entry_edit: ', self.track_edit_bool_arr)
 
-            self.__edit_bool = np.any(self.track_edit_bool_arr)
+        self.__edit_bool = np.any(self.track_edit_bool_arr)
 
             # group_print(__edit_bool = self.__edit_bool)
 
@@ -513,22 +524,34 @@ class Report_GUI(tk.Frame):
 
 
     def report_detail_panel(self):
-        self.ctrl_tk_frame1 = tk.Frame(self, bg = 'DodgerBlue2') #'SystemButtonFace'
-        tk.Label(self.ctrl_tk_frame1, text = 'Report Detail:', font = 'Helvetica 14 bold', fg = "white", bg = 'DodgerBlue2').place(x=5, y = 2)
+        self.left_main_gui = tk.Frame(self, bg = 'DodgerBlue2') #'SystemButtonFace'
+        tk.Label(self.left_main_gui, text = 'Report Detail:', font = 'Helvetica 14 bold', fg = "white", bg = 'DodgerBlue2').place(x=5, y = 2)
 
-        self.reload_worksheet_btn = tk.Button(self.ctrl_tk_frame1, relief = tk.GROOVE, image = self.refresh_icon
+        self.reload_worksheet_btn = tk.Button(self.left_main_gui, relief = tk.GROOVE, image = self.refresh_icon
             , activebackground = 'DarkSlateGray1')
 
         CreateToolTip(self.reload_worksheet_btn, 'Reload Worksheet'
             , 0, -25-2, width = 138, height = 25, font = 'Tahoma 12')
 
-        self.reload_worksheet_btn.place(x=-10-15, y = 2, relx = 1, rely = 0, anchor = 'ne')
+        self.reload_worksheet_btn.place(x = -25, y = 2, relx = 1, rely = 0, anchor = 'ne')
         widget_disable(self.reload_worksheet_btn)
         self.reload_worksheet_btn['command'] = self.reload_worksheet_data
 
-        self.ctrl_tk_frame1.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+        self.load_csv_btn = tk.Button(self.left_main_gui, relief = tk.GROOVE, image = self.clipboard_icon)
+        CreateToolTip(self.load_csv_btn, 'Load CSV Data'
+            , 0, -25-2, width = 138, height = 25, font = 'Tahoma 12')
+        self.load_csv_btn['command'] = self.load_csv_data
+        self.load_csv_btn.place(x = -25 - (25+15), y = 2, relx = 1, rely = 0, anchor = 'ne')
 
-        self.ctrl_scroll_class = ScrolledCanvas(self.ctrl_tk_frame1, frame_w = 470, frame_h = 2000, canvas_x = 0, canvas_y = 35, bg = 'DodgerBlue2')
+        self.clear_data_btn = tk.Button(self.left_main_gui, relief = tk.GROOVE, image = self.reset_icon)
+        CreateToolTip(self.clear_data_btn, 'Clear All Data'
+            , 0, -25-2, width = 138, height = 25, font = 'Tahoma 12')
+        self.clear_data_btn['command'] = self.clear_btn_event
+        self.clear_data_btn.place(x = -25 - (25+15) - (25+15), y = 2, relx = 1, rely = 0, anchor = 'ne')
+
+        self.left_main_gui.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+
+        self.ctrl_scroll_class = ScrolledCanvas(self.left_main_gui, frame_w = 470, frame_h = 2000, canvas_x = 0, canvas_y = 35, bg = 'DodgerBlue2')
         self.ctrl_scroll_class.show()
 
         parent = self.ctrl_scroll_class.window_fr
@@ -1061,13 +1084,13 @@ class Report_GUI(tk.Frame):
         return return_lb_list, return_entry_list, resultant_height
 
     def report_ctrl_panel(self):
-        self.ctrl_tk_frame2 = tk.Frame(self, bg = 'SystemButtonFace')
-        # self.ctrl_tk_frame2.place(x=0, y = 35, relx = 0, rely = 0, relheight = 1, relwidth = 1, width = -(300 +150) - 80, height = -35 -15, anchor = 'nw')
-        # self.ctrl_tk_frame2.place(x=-70, y = 35, relx = 0.55, rely = 0, relheight = 1, relwidth = 0.45, width = 50, height = -35 -15, anchor = 'nw')
-        self.ctrl_tk_frame2.place(x=-75, y = 5, relx = 0.55, rely = 0, relheight = 1, relwidth = 0.45, width = 50, height = -5 - 15, anchor = 'nw')
+        self.right_main_gui = tk.Frame(self, bg = 'SystemButtonFace')
+        # self.right_main_gui.place(x=0, y = 35, relx = 0, rely = 0, relheight = 1, relwidth = 1, width = -(300 +150) - 80, height = -35 -15, anchor = 'nw')
+        # self.right_main_gui.place(x=-70, y = 35, relx = 0.55, rely = 0, relheight = 1, relwidth = 0.45, width = 50, height = -35 -15, anchor = 'nw')
+        self.right_main_gui.place(x=-75, y = 5, relx = 0.55, rely = 0, relheight = 1, relwidth = 0.45, width = 50, height = -5 - 15, anchor = 'nw')
 
-        gen_report_tk_fr = tk.Frame(self.ctrl_tk_frame2, bg = 'DodgerBlue2')
-        event_log_tk_fr = tk.Frame(self.ctrl_tk_frame2, bg = 'SystemButtonFace')
+        gen_report_tk_fr = tk.Frame(self.right_main_gui, bg = 'DodgerBlue2')
+        event_log_tk_fr = tk.Frame(self.right_main_gui, bg = 'SystemButtonFace')
 
         # gen_report_tk_fr.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 1, width = 0, height = -255, anchor = 'nw')
         # event_log_tk_fr.place(x=0, y = -255, relx = 0, rely = 1, relheight = 0, relwidth = 1, width = 0, height = 255, anchor = 'nw') #since the height of event log is 220 and placed at y = 30
@@ -1112,7 +1135,6 @@ class Report_GUI(tk.Frame):
         CreateToolTip(self.folder_dir_btn, 'Open Save Folder'
             , 32, -5, font = 'Tahoma 11')
         self.folder_dir_btn.place(x=250, y = 35)
-
 
         self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
 
@@ -1697,6 +1719,26 @@ class Report_GUI(tk.Frame):
         widget_enable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
             , self.worksheet_name_entry)
 
+    def reset_worksheet_data(self):
+        for edit_data in self.edit_data_dict.values():
+            if type(edit_data[2]) == list:
+                self.clear_ref_edit_list(edit_data[2])
+            elif (isinstance(edit_data[2], np.ndarray)) == True:
+                self.clear_ref_edit_arr(edit_data[2])
+            
+            self.reset_edit_bool_arr(edit_data[1])
+
+        self.clear_all_upload_log()
+        self.reset_track_edit_bool_arr()
+        self.clear_all_report_detail()
+
+    def clear_btn_event(self):
+        ask_msgbox = Ask_Msgbox(message = "Unsaved changes will be cleared!" + "\n\nAre you sure?"
+            , parent = self.master, title = 'Clear All', message_anchor = 'w', ask_OK = False, mode = 'warning')
+
+        if ask_msgbox.ask_result() == True:
+            self.reset_worksheet_data()
+
     def new_report_init(self):
         self.report_mode_btn_state(self.new_report_btn, self.load_report_btn)
         ask_msgbox = Ask_Msgbox(message = "You have selected 'New Report'.\nAny unsaved changes will be cleared!" + "\n\nAre you sure?"
@@ -1724,19 +1766,7 @@ class Report_GUI(tk.Frame):
 
             widget_disable(self.worksheet_name_dropbox, self.rename_worksheet_btn, self.create_worksheet_checkbtn)
 
-
-            for edit_data in self.edit_data_dict.values():
-                if type(edit_data[2]) == list:
-                    self.clear_ref_edit_list(edit_data[2])
-                elif (isinstance(edit_data[2], np.ndarray)) == True:
-                    self.clear_ref_edit_arr(edit_data[2])
-
-                self.reset_edit_bool_arr(edit_data[1])
-
-            self.clear_all_report_detail()
-            self.clear_all_upload_log()
-
-            self.reset_track_edit_bool_arr()
+            self.reset_worksheet_data()
 
             self.curr_report_file_tk_var.set('Current Report File: ' + (str(self.xl_load_path).split('/'))[-1])
             self.curr_worksheet_tk_var.set('Current Worksheet: ' + 'None')
@@ -1794,21 +1824,10 @@ class Report_GUI(tk.Frame):
                 self.xl_class.xl_set_column_width(self.xl_class.worksheet, 'AI', 'AN')
                 ###########################################################################
 
-                for edit_data in self.edit_data_dict.values():
-                    if type(edit_data[2]) == list:
-                        self.clear_ref_edit_list(edit_data[2])
-                    elif (isinstance(edit_data[2], np.ndarray)) == True:
-                        self.clear_ref_edit_arr(edit_data[2])
-                    
-                    self.reset_edit_bool_arr(edit_data[1])
+                self.reset_worksheet_data()
 
                 self.load_worksheet_data()
-
-                self.clear_all_upload_log()
-
                 self.load_worksheet_image()
-
-                self.reset_track_edit_bool_arr()
 
                 self.update_worksheet_dropbox()
                 self.xl_worksheet_name = self.xl_class.worksheet.title
@@ -1838,42 +1857,20 @@ class Report_GUI(tk.Frame):
 
                 self.event_log_load_report()
 
-
     def reload_worksheet_data(self):
         if self.__edit_bool == False:
-            for edit_data in self.edit_data_dict.values():
-                if type(edit_data[2]) == list:
-                    self.clear_ref_edit_list(edit_data[2])
-                elif (isinstance(edit_data[2], np.ndarray)) == True:
-                    self.clear_ref_edit_arr(edit_data[2])
-
-                self.reset_edit_bool_arr(edit_data[1])
-
+            self.reset_worksheet_data()
             self.load_worksheet_data()
-            self.clear_all_upload_log()
-
             self.load_worksheet_image()
-
-            self.reset_track_edit_bool_arr()
 
         elif self.__edit_bool == True:
             ask_msgbox = Ask_Msgbox(message = "Current Edit/Changes on UI will be replaced if you Reload Worksheet!" + "\n\nAre you sure?"
             , parent = self.master, title = 'Warning', mode = 'warning', message_anchor = 'w', width = 350, ask_OK = False)
             if ask_msgbox.ask_result() == True:
-                for edit_data in self.edit_data_dict.values():
-                    if type(edit_data[2]) == list:
-                        self.clear_ref_edit_list(edit_data[2])
-                    elif (isinstance(edit_data[2], np.ndarray)) == True:
-                        self.clear_ref_edit_arr(edit_data[2])
-
-                    self.reset_edit_bool_arr(edit_data[1])
-
+                self.reset_worksheet_data()
                 self.load_worksheet_data()
-                self.clear_all_upload_log()
-
                 self.load_worksheet_image()
-
-                self.reset_track_edit_bool_arr()
+                print(self.photo_upload_img_dict)
             else:
                 pass
 
@@ -1953,6 +1950,117 @@ class Report_GUI(tk.Frame):
 
             self.edit_data_dict["Lens Details"][2][i] = read_data
     
+    def load_csv_data(self):
+        csv_file = filedialog.askopenfilename(initialdir = self.__csv_curr_dir, parent = self, title="Select file", filetypes = [('CSV file', '*.csv')], multiple = False)
+        if csv_file == '':
+            return
+        else:
+            self.reset_worksheet_data()
+            self.__csv_curr_dir = os.path.join(csv_file, os.pardir)
+
+            ret, csv_data, csv_img = tk_opencsv.read_csv(csv_file)
+            if ret == 0:
+                sample_detail   = csv_data[0]
+                test_criteria   = csv_data[1]
+                light_detail    = csv_data[2]
+                ctrl_detail     = csv_data[3]
+                cam_detail      = csv_data[4]
+                lens_detail     = csv_data[5]
+
+                sample_bg   = sample_detail['Background'] 
+                sample_dim  = sample_detail['Product dimension']
+                if sample_dim is not None:
+                    self.photo_dim_entry.set_text(str(sample_dim), reset_undo_stack = True)
+
+                elif sample_dim is None:
+                    self.photo_dim_entry.set_text('', reset_undo_stack = True)
+
+                if sample_bg in self.photo_bg_list:
+                    self.photo_bg_combobox.current(self.photo_bg_list.index(sample_bg))
+                else:
+                    self.photo_bg_combobox.set('')
+            
+            i = 0
+            for i, read_data in enumerate(test_criteria.values()):
+                if read_data is not None:
+                    self.test_criteria_entry_list[i].set_text(read_data, reset_undo_stack = True)
+                elif read_data is None:
+                    self.test_criteria_entry_list[i].set_text('', reset_undo_stack = True)
+            
+            i = 0
+            for i, read_data in enumerate(light_detail.values()):
+                if read_data is not None:
+                    self.light_detail_entry_list[i].set_text(read_data, reset_undo_stack = True)
+                elif read_data is None:
+                    self.light_detail_entry_list[i].set_text('', reset_undo_stack = True)
+            
+            i = 0
+            for i, read_data in enumerate(ctrl_detail.values()):
+                if read_data is not None:
+                    self.ctrl_detail_entry_list[i].set_text(read_data, reset_undo_stack = True)
+                elif read_data is None:
+                    self.ctrl_detail_entry_list[i].set_text('', reset_undo_stack = True)
+            
+            i = 0
+            for i, read_data in enumerate(cam_detail.values()):
+                if read_data is not None:
+                    self.cam_detail_entry_list[i].set_text(read_data, reset_undo_stack = True)
+                elif read_data is None:
+                    self.cam_detail_entry_list[i].set_text('', reset_undo_stack = True)
+            
+            i = 0
+            for i, read_data in enumerate(lens_detail.values()):
+                if read_data is not None:
+                    self.lens_detail_entry_list[i].set_text(read_data, reset_undo_stack = True)
+                elif read_data is None:
+                    self.lens_detail_entry_list[i].set_text('', reset_undo_stack = True)
+
+            ### Check Entry for any Edit/Changes
+            for i, tk_var in enumerate(self.test_criteria_var_list):
+                self.check_entry_edit(tk_event = None, ref_arr_index = i, tk_var = tk_var, edit_dict_key = "Testing Criteria")
+
+            for i, tk_var in enumerate(self.light_detail_var_list):
+                self.check_entry_edit(tk_event = None, ref_arr_index = i, tk_var = tk_var, edit_dict_key = "Lighting Details")
+
+            for i, tk_var in enumerate(self.ctrl_detail_var_list):
+                self.check_entry_edit(tk_event = None, ref_arr_index = i, tk_var = tk_var, edit_dict_key = "Controller Details")
+
+            for i, tk_var in enumerate(self.cam_detail_var_list):
+                self.check_entry_edit(tk_event = None, ref_arr_index = i, tk_var = tk_var, edit_dict_key = "Camera Details")
+
+            for i, tk_var in enumerate(self.lens_detail_var_list):
+                self.check_entry_edit(tk_event = None, ref_arr_index = i, tk_var = tk_var, edit_dict_key = "Lens Details")
+
+            #############################################################################################################################################
+            ###load csv images
+            start_id_arr = np.zeros(2, dtype=np.uint8) #Determine the start image id when loading image from worksheet. If current dictionary(ies) is/are empty, we start at id = 0.
+            start_id_arr[0] = (0 if len(self.photo_upload_img_dict) == 0 else int(list(self.photo_upload_img_dict.keys())[-1]) + 1)
+            start_id_arr[1] = (0 if len(self.target_upload_img_dict) == 0 else int(list(self.target_upload_img_dict.keys())[-1]) + 1)
+
+            start_id_copy = start_id_arr.copy() ### A copy to recall what were the start_id values when we update the GUI using self.upload_log_callback
+
+            for np_img in csv_img[0].values():
+                self.photo_upload_img_dict[str(start_id_arr[0])] = np_img
+                start_id_arr[0] = start_id_arr[0] + 1
+
+            for np_img in csv_img[1].values():
+                self.target_upload_img_dict[str(start_id_arr[1])] = np_img
+                start_id_arr[1] = start_id_arr[1] + 1
+
+            for _ in range(start_id_copy[0], len(self.photo_upload_img_dict)):
+                self.upload_log_callback(parent = self.photo_upload_log, log_dict = self.photo_upload_log_dict, img_dict = self.photo_upload_img_dict
+                    , scroll_class = self.photo_upload_log_class, col_tracker_list = self.photo_upload_col_tracker, update_only = True, edit_dict_key = "Sample Image")
+            for _ in range(start_id_copy[1], len(self.target_upload_img_dict)):
+                self.upload_log_callback(parent = self.target_upload_log, log_dict = self.target_upload_log_dict, img_dict = self.target_upload_img_dict
+                    , scroll_class = self.target_upload_log_class, col_tracker_list = self.target_upload_col_tracker, update_only = True, edit_dict_key = "Target Image")
+
+            del start_id_copy, start_id_arr
+
+            ### Check Image Upload for any Edit/Changes
+            self.check_image_edit("Sample Image", self.photo_upload_img_dict)
+            self.check_image_edit("Target Image", self.target_upload_img_dict)
+
+
     def retrieve_imtext_data(self, ws, img_obj, cell_id, start_col, end_col):
 
         _, imtext_cell_id, _ = self.xl_class.compute_next_anchor_img(ws = ws, img_obj = img_obj, cell_id = cell_id
@@ -1978,14 +2086,16 @@ class Report_GUI(tk.Frame):
         start_id_arr[4] = (0 if len(self.binary_upload_img_dict) == 0 else int(list(self.binary_upload_img_dict.keys())[-1]) + 1)
         start_id_arr[5] = (0 if len(self.setup_upload_img_dict) == 0 else int(list(self.setup_upload_img_dict.keys())[-1]) + 1)
         # print(start_id_arr)
+        start_id_copy = start_id_arr.copy() ### A copy to recall what were the start_id values when we update the GUI using self.upload_log_callback
 
         xl_imloader = self.xl_class.xl_read_image(ws = self.xl_class.worksheet, sort_col_bool = True) #will sort according to columns then rows (top-to-bottom)...
-        
+        # print(xl_imloader)
         imtext_memory_arr = np.empty((6), dtype=object)
         for i in range(0, len(imtext_memory_arr)):
-            imtext_memory_arr[i] = []
+            imtext_memory_arr[i] = [] ###array containg image text or descriptions from the excel report when user load excel report.
 
         ### Extracting image(s) from excel and inserting it into respective img_dictionary(ies)
+        # print(xl_imloader._images.items(), start_id_arr)
         for cell_id, img_obj in xl_imloader._images.items():
             col_char = re.split('(\\d+)',cell_id)[0]
             if col_char == 'A':
@@ -2027,32 +2137,33 @@ class Report_GUI(tk.Frame):
             del img_obj
 
         del xl_imloader
-        del start_id_arr
 
         ### Create corresponding widgets in each upload User-Interface base on the amount of image(s) in the image dictionary(ies)
-        for _ in range(0, len(self.photo_upload_img_dict)):
+        for _ in range(start_id_copy[0], len(self.photo_upload_img_dict)):
             self.upload_log_callback(parent = self.photo_upload_log, log_dict = self.photo_upload_log_dict, img_dict = self.photo_upload_img_dict
                 , scroll_class = self.photo_upload_log_class, col_tracker_list = self.photo_upload_col_tracker, update_only = True, edit_dict_key = "Sample Image")
 
-        for _ in range(0, len(self.light_setup_img_dict)):
+        for _ in range(start_id_copy[1], len(self.light_setup_img_dict)):
             self.upload_log_callback(parent = self.light_setup_log, log_dict = self.light_setup_log_dict, img_dict = self.light_setup_img_dict
                 , scroll_class = self.light_setup_log_class, col_tracker_list = self.light_setup_col_tracker, update_only = True, edit_dict_key = "Lighting Drawing")
 
-        for _ in range(0, len(self.target_upload_img_dict)):
+        for _ in range(start_id_copy[2], len(self.target_upload_img_dict)):
             self.upload_log_callback(parent = self.target_upload_log, log_dict = self.target_upload_log_dict, img_dict = self.target_upload_img_dict
                 , scroll_class = self.target_upload_log_class, col_tracker_list = self.target_upload_col_tracker, update_only = True, edit_dict_key = "Target Image")
 
-        for _ in range(0, len(self.gray_upload_img_dict)):
+        for _ in range(start_id_copy[3], len(self.gray_upload_img_dict)):
             self.upload_log_callback(parent = self.gray_upload_log, log_dict = self.gray_upload_log_dict, img_dict = self.gray_upload_img_dict
                 , scroll_class = self.gray_upload_log_class, col_tracker_list = self.gray_upload_col_tracker, update_only = True, edit_dict_key = "Grayscale Image")
 
-        for _ in range(0, len(self.binary_upload_img_dict)):
+        for _ in range(start_id_copy[4], len(self.binary_upload_img_dict)):
             self.upload_log_callback(parent = self.binary_upload_log, log_dict = self.binary_upload_log_dict, img_dict = self.binary_upload_img_dict
                 , scroll_class = self.binary_upload_log_class, col_tracker_list = self.binary_upload_col_tracker, update_only = True, edit_dict_key = "Binary Image")
 
-        for _ in range(0, len(self.setup_upload_img_dict)):
+        for _ in range(start_id_copy[5], len(self.setup_upload_img_dict)):
             self.upload_log_callback(parent = self.setup_upload_log, log_dict = self.setup_upload_log_dict, img_dict = self.setup_upload_img_dict
                 , scroll_class = self.setup_upload_log_class, col_tracker_list = self.setup_upload_col_tracker, update_only = True, edit_dict_key = "Setup Image")
+
+        del start_id_copy, start_id_arr
 
         self.edit_data_dict["Sample Image"][2] = list(self.photo_upload_img_dict.values())
         self.edit_data_dict["Lighting Drawing"][2] = list(self.light_setup_img_dict.values())
@@ -2060,7 +2171,6 @@ class Report_GUI(tk.Frame):
         self.edit_data_dict["Grayscale Image"][2] = list(self.gray_upload_img_dict.values())
         self.edit_data_dict["Binary Image"][2] = list(self.binary_upload_img_dict.values())
         self.edit_data_dict["Setup Image"][2] = list(self.setup_upload_img_dict.values())
-        
 
         # group_print(self.edit_data_dict["Sample Image"][2]
         #     , self.edit_data_dict["Lighting Drawing"][2]
@@ -2518,10 +2628,12 @@ class Report_GUI(tk.Frame):
         self.loading_disp_start()
         self.thread_event.set()
 
-        self.err_msgbox_flag_1 = False
+        self.err_msgbox_flag_1 = False ### Error Flag: If user left out important report details
 
         event_error = False
-        self.err_msgbox_flag_2 = False
+        self.err_msgbox_flag_2 = False ### Error Flag: If user attempt to generate/update report when report is opened in Excel.
+
+        self.err_msgbox_flag_3 = False ### Exception Flag: When Code/Algorithm have an error
 
         event_reset = False
 
@@ -2529,6 +2641,7 @@ class Report_GUI(tk.Frame):
 
         self.report_error_msgbox_1()
         self.report_error_msgbox_2()
+        self.report_error_msgbox_3()
         self.report_info_msgbox()
 
         widget_disable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
@@ -2557,9 +2670,36 @@ class Report_GUI(tk.Frame):
             self.xl_worksheet_name = self.xl_class.xl_new_workbook(self.xl_worksheet_name)
             self.xl_class.xl_init_workbook(init_row_num = 2, init_col_char = 'A')
 
+        try:
+            event_input_err, report_data_list = self.insert_report_data()
+        except Exception: ### Capture Exception if there are any error occuring in the module, python imports
+            err_msg = (   "-----------------------------------Exception Error--------------------------------------\n"
+                        + "{}: ".format(datetime.now().strftime("(%d-%m-%Y, %H:%M:%S) "))
+                        + "{}\n".format(traceback.format_exc())
+                        + "-----------------------------------Exception Error--------------------------------------\n\n")
+            self.event_log_txtbox.insert_readonly("0.0"
+                , err_msg)
+            del err_msg
 
-        event_input_err, report_data_list = self.insert_report_data()
+            self.thread_event.clear()
+            self.err_msgbox_flag_3 = True
+            self.clear_info_msgbox()
+            self.clear_error_msgbox_1()
+            self.clear_error_msgbox_2()
+            self.loading_disp_stop()
+            self.worksheet_name_dropbox['state'] = 'readonly'
+
+            widget_enable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
+                , self.worksheet_name_entry
+                , self.rename_worksheet_btn, self.create_worksheet_checkbtn)
+            self.xl_class.xl_close_workbook()
+            if self.xl_load_path is not None:
+                widget_enable(self.reload_worksheet_btn)
+                self.xl_class.xl_open_workbook(self.xl_load_path)
             
+            return
+        
+        self.clear_error_msgbox_3()
         if self.xl_load_path is not None and self.update_report_bool.get() == 1:
             # print("Updating...")
             if event_input_err == True:
@@ -2694,16 +2834,19 @@ class Report_GUI(tk.Frame):
             self.loading_disp_start()
             self.thread_event.set()
 
-            self.err_msgbox_flag_1 = False
+            self.err_msgbox_flag_1 = False ### Error Flag: If user left out important report details
 
             event_error = False
-            self.err_msgbox_flag_2 = False
+            self.err_msgbox_flag_2 = False ### Error Flag: If user attempt to generate/update report when report is opened in Excel.
+
+            self.err_msgbox_flag_3 = False ### Exception Flag: When Code/Algorithm have an error
 
             prev_worksheet_name = None
 
             self.report_info_msgbox()
             self.report_error_msgbox_1()
             self.report_error_msgbox_2()
+            self.report_error_msgbox_3()
 
             widget_disable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
                 , self.worksheet_name_dropbox, self.worksheet_name_entry
@@ -2722,7 +2865,36 @@ class Report_GUI(tk.Frame):
 
             # print('Worksheet: ', self.xl_class.worksheet.title)
 
-            event_input_err, report_data_list = self.insert_report_data()
+            try:
+                event_input_err, report_data_list = self.insert_report_data()
+            except Exception:
+                err_msg = (   "-----------------------------------Exception Error--------------------------------------\n"
+                            + "{}: ".format(datetime.now().strftime("(%d-%m-%Y, %H:%M:%S) "))
+                            + "{}\n".format(traceback.format_exc())
+                            + "-----------------------------------Exception Error--------------------------------------\n\n")
+                self.event_log_txtbox.insert_readonly("0.0"
+                    , err_msg)
+                del err_msg
+
+                self.thread_event.clear()
+                self.err_msgbox_flag_3 = True
+                self.clear_info_msgbox()
+                self.clear_error_msgbox_1()
+                self.clear_error_msgbox_2()
+                self.loading_disp_stop()
+                self.worksheet_name_dropbox['state'] = 'readonly'
+
+                widget_enable(self.update_report_btn, self.generate_report_btn, self.update_report_checkbtn
+                    , self.worksheet_name_entry
+                    , self.rename_worksheet_btn, self.create_worksheet_checkbtn)
+                widget_enable(self.reload_worksheet_btn)
+                
+                self.xl_class.xl_close_workbook()
+                if self.xl_load_path is not None:
+                    self.xl_class.xl_open_workbook(self.xl_load_path)
+                return
+            
+            self.clear_error_msgbox_3()
 
             if event_input_err == True:
                 if self.create_worksheet_bool.get() == 1:
@@ -2879,6 +3051,26 @@ class Report_GUI(tk.Frame):
             self.err_msgbox_handle_2 = None
             self.err_msgbox_flag_2 = False
 
+    def report_error_msgbox_3(self):
+        # print('Looping')
+        if self.err_msgbox_flag_3 == False:
+            self.err_msgbox_handle_3 = self.after(100, self.report_error_msgbox_3)
+
+        else:
+            self.clear_error_msgbox_3()
+            # Error_Msgbox(message = "Save Error!\nReport File is Currently Opened in Microsoft Excel!\nPlease close Microsoft Excel and try again.", title = 'Error'
+            #         , message_anchor = 'w', width = 370)
+            Error_Msgbox(message = "Exception Error during Report Generation!\n\n"
+                + "Please refer to the Event Logs for Details!", title = 'Exception Error'
+                    , message_anchor = 'w', height = 180)
+
+    def clear_error_msgbox_3(self):
+        if self.err_msgbox_handle_3 is not None:
+            self.after_cancel(self.err_msgbox_handle_3)
+            del self.err_msgbox_handle_3
+            self.err_msgbox_handle_3 = None
+            self.err_msgbox_flag_3 = False
+
 
     def report_info_msgbox(self):
         # print('Looping report info msgbox')
@@ -2967,12 +3159,12 @@ class Report_GUI(tk.Frame):
             self.loading_tk_var.set('Processing')
 
         self.loading_display.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
-        self.ctrl_tk_frame1.place_forget()
+        self.left_main_gui.place_forget()
         self.__loading_handle = self.after(300, self.loading_disp_start)
 
     def loading_disp_stop(self):
         self.loading_display.place_forget()
-        self.ctrl_tk_frame1.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
+        self.left_main_gui.place(x=0, y = 0, relx = 0, rely = 0, relheight = 1, relwidth = 0.55, width = -80, height = -15, anchor = 'nw')
         self.loading_tk_var.set('Processing')
         if self.__loading_handle is not None:
             self.after_cancel(self.__loading_handle)

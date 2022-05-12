@@ -190,12 +190,6 @@ class Hikvision_Operation():
         self.sq_frame_save_list = []
         self.__sq_save_next_id_index = None
         #EXTERNAL SQ STROBE FRAME PARAMETER(S)
-        # self.ext_sq_fr_init = False
-
-        self.cam_display_thread = None
-        self.cam_display_event = threading.Event()
-        self.cam_display_event.set()
-        self.cam_display_bool = False
 
         self.video_write_thread = None
         self.video_record_thread = None
@@ -548,11 +542,6 @@ class Hikvision_Operation():
 
             self.b_start_grabbing = True
 
-            if self.cam_display_thread is None:
-                self.cam_display_event.clear()
-                self.cam_display_thread = threading.Thread(target=self.Cam_Disp_Thread, daemon = True)
-                self.cam_display_thread.start()
-
             try:
                 self.start_grabbing_event.clear()
                 self.h_thread_handle = threading.Thread(target=self.Work_thread, daemon = True)
@@ -573,21 +562,6 @@ class Hikvision_Operation():
             self.start_grabbing_event.set()
             
             ####################################
-            self.cam_display_event.set()
-
-            if self.cam_display_thread is not None:
-                try:
-                    Stop_thread(self.cam_display_thread)
-                except Exception:# as e:
-                    # print("Force Stop Error: ", e)
-                    pass
-                del self.cam_display_thread
-                self.cam_display_thread = None
-                self.Normal_Mode_display_clear()
-                self.SQ_Mode_display_clear()
-
-            self.cam_display_bool = False
-
             if True == self.b_thread_closed:
                 try:
                     Stop_thread(self.h_thread_handle)
@@ -598,6 +572,9 @@ class Hikvision_Operation():
                 self.h_thread_handle = None
                 #print(self.h_thread_handle)
                 self.b_thread_closed = False
+
+            self.Normal_Mode_display_clear()
+            self.SQ_Mode_display_clear()
                 
             ret = self.obj_cam.MV_CC_StopGrabbing()
             if ret != 0:
@@ -707,29 +684,23 @@ class Hikvision_Operation():
 
         trigger_mode = self.trigger_mode
         ext_sq_fr_init = False
-        interrupt = False
 
         while not self.start_grabbing_event.isSet():
-            # start_time = time.time()
-            if self.trigger_mode == True:
-                if trigger_mode != self.trigger_mode:
-                    trigger_mode = self.trigger_mode
-                    interrupt = True
-            else:
-                trigger_mode = self.trigger_mode
+            start_time = time.time()
+            trigger_mode = self.trigger_mode
 
             ret = self.obj_cam.MV_CC_GetOneFrameTimeout(byref(self.buf_cache), self.n_payload_size, stFrameInfo, 1000) #If Set to Trigger mode ret != 0 until trigger once is pressed.
 
             ################################################################
-            ### Important lines: To prevent leaked frames when user switch camera mode
-            if interrupt == True:
-                self.start_grabbing_event.wait(0.3)
-                # print("Mode Switching")
-                interrupt = False
-                ext_sq_fr_init = False
-                continue
-            ################################################################
-            # print('Get Frame Error: ', self.To_hex_str(ret), trigger_mode)
+            # print('Get Frame Error: ', self.To_hex_str(ret))
+            stop_time = time.time()
+            elapsed_time = stop_time - start_time
+            ideal_delay = np.divide(1, self.Get_actual_framerate())
+            actual_delay = ideal_delay - elapsed_time
+            if actual_delay < 0:
+                actual_delay = 0
+            self.start_grabbing_event.wait(actual_delay)
+            del start_time, stop_time, elapsed_time, ideal_delay, actual_delay
 
             if ret == 0:
                 #获取到图像的时间开始节点获取到图像的时间开始节点
@@ -760,6 +731,7 @@ class Hikvision_Operation():
                     del sq_bool
 
                     ext_sq_fr_init = False
+
 
                 continue
 
@@ -860,7 +832,6 @@ class Hikvision_Operation():
             elif self.__cam_class.capture_img_status.get() == 0:
                 self.freeze_numArray = None
 
-            self.cam_display_bool = True
             # stop_time = time.time()
             # elapsed_time = stop_time - start_time
             # print('FPS: ', 1/elapsed_time)
@@ -887,7 +858,6 @@ class Hikvision_Operation():
                     self.sq_frame_img_list.append(self.numArray)
                     # print('Sq Frame: ',len(self.sq_frame_img_list))
                     if len(self.sq_frame_img_list) ==  max_fr:
-                        # print('SQ Display')
                         self.External_SQ_Fr_Disp()
                         self.Auto_Save_SQ_Frame()
                         ext_sq_fr_init = False
@@ -929,6 +899,8 @@ class Hikvision_Operation():
             # stop_time = time.time()
             # elapsed_time = stop_time - start_time
             # print('FPS: ', 1/elapsed_time)
+
+            self.All_Mode_Cam_Disp()
 
             if self.b_exit == True:
                 #print('breaking')
@@ -1428,17 +1400,6 @@ class Hikvision_Operation():
                 img_arr = self.numArray
 
             self.Normal_Mode_Save(arr_1 = img_arr, trigger_mode = self.trigger_mode)
-
-    def Cam_Disp_Thread(self):
-        self.cam_display_bool = False
-
-        while not self.cam_display_event.isSet():
-            actual_frame_rate = self.Get_actual_framerate()
-            cam_display_fps = np.divide(1, float(actual_frame_rate))
-            if self.cam_display_bool == True:
-                self.All_Mode_Cam_Disp()
-
-            self.cam_display_event.wait(cam_display_fps)
 
 
     def All_Mode_Cam_Disp(self):

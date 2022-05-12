@@ -1117,6 +1117,7 @@ class XL_WorkBook():
 
     def xl_open_workbook(self, file_path, sheet_name = None):
         self.workbook = load_workbook(file_path)
+        # print(self.workbook)
         if type(sheet_name) == str:
             self.xl_select_worksheet(sheet_name)
         else:

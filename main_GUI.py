@@ -109,6 +109,8 @@ class main_GUI():
                                 , text_icon = self.text_icon
                                 , window_icon = self.window_icon
                                 , folder_icon = self.folder_icon
+                                , reset_icon = self.reset_icon
+                                , clipboard_icon = self.report_b_icon 
                                 )
             )
         main_GUI.class_report_gui.place(relwidth = 1, relheight =1, x=0,y=0)
@@ -186,6 +188,7 @@ class main_GUI():
         self.multi_cam_icon  = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "multi_cam_icon_4.png")
         self.img_icon        = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "image1.png")
         self.report_icon     = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "clipboard (1).png")
+        self.report_b_icon   = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "clipboard_black(1).png")
         self.web_icon        = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "web_resource.png")
         self.infinity_icon   = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "infinity_2.png")
         self.info_icon       = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "info.png")
@@ -197,6 +200,7 @@ class main_GUI():
         self.save_icon       = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "diskette.png")
         self.popout_icon     = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "popout.png")
         self.refresh_icon    = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "right.png")
+        self.reset_icon      = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "reset.png")
         self.disconn_icon    = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "transDC_2.png")
         self.conn_icon       = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "connect_icon.png", RGBA_format = True)
         self.setting_icon    = open_pil_img(img_PATH = self.img_PATH, img_folder = "TMS Icon", img_file = "settings.png")

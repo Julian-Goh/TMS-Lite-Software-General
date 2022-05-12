@@ -1,5 +1,5 @@
 import tkinter as tk
-from Tk_Validate.tk_validate import *
+from misc_module.number_check import *
 
 class ScrolledCanvas():
     def __init__(self, master, frame_w, frame_h, canvas_x = 0, canvas_y = 0, bg = 'SystemButtonFace'
@@ -18,8 +18,11 @@ class ScrolledCanvas():
 
         self.__bar_w = 18 #width of a typical scrollbar
         
-        self.resize_event_w = frame_w #During init we set this equal to frame_w
-        self.resize_event_h = frame_h #During init we set this equal to frame_h
+        self.resize_event_w = frame_w ### use to store event.width during resizing event #During init we set this equal to frame_w
+        self.resize_event_h = frame_h ### use to store event.height during resizing event #During init we set this equal to frame_h
+
+        self.__check_w = frame_w ### use to check frame_w during resizing event.
+        self.__check_h = frame_h ### use to check frame_h during resizing event.
 
         self.scrolly_lock = False
         
@@ -27,7 +30,7 @@ class ScrolledCanvas():
         self.canvas['width'] = frame_w
         self.canvas['height'] = frame_h
 
-        self.window_fr = tk.Frame(self.canvas, highlightthickness = 0, bg = bg)
+        self.window_fr = tk.Frame(self.canvas, highlightthickness = 0, bg = bg, bd = 0)
         self.window_fr['width'] = frame_w
         self.window_fr['height'] = frame_h
         self.window_fr.bind('<Configure>', lambda e: self.canvas.configure(scrollregion= self.canvas.bbox("all")))
@@ -46,6 +49,8 @@ class ScrolledCanvas():
         self.scrollx.place(relx=0, rely=1, relwidth=1, width = -self.__bar_w-self.hbar_x, x = self.hbar_x, y = self.hbar_y, anchor = 'sw')
 
         # self.canvas.configure(yscrollcommand= self.scrolly.set)
+        self.__scrollx_exist = True
+        self.__scrolly_exist = True
 
         self.canvas.configure(yscrollcommand= self.scrolly_handle)
         self.canvas.configure(xscrollcommand= self.scrollx_handle)
@@ -64,26 +69,27 @@ class ScrolledCanvas():
         # print('self.frame_w, self.frame_h: ', self.frame_w, self.frame_h)
         # print(event)
         # print('event.width, event.height: ', event.width, event.height)
-        self.resize_event_h = int(event.height)
-        self.resize_event_w = int(event.width)
+        self.resize_event_h = event.height
+        self.resize_event_w = event.width
 
-        if self.frame_h <= event.height:
-            self.window_fr['height'] = event.height
-            self.canvas['height'] = event.height
-            self.scrolly_lock = True
+        if self.__scrollx_exist == True     and self.__scrolly_exist == True:
+            self.__check_h = int(event.height) + self.__bar_w
+            self.__check_w = int(event.width) + self.__bar_w
 
-        elif self.frame_h > event.height:
-            self.window_fr['height'] = self.frame_h
-            self.canvas['height'] = self.frame_h
-            self.scrolly_lock = False
+        elif self.__scrollx_exist == True   and self.__scrolly_exist == False:
+            self.__check_h = int(event.height) + self.__bar_w
+            self.__check_w = int(event.width)
 
-        if self.frame_w <= event.width:
-            self.window_fr['width'] = event.width
-            self.canvas['width'] = event.width
+        elif self.__scrollx_exist == False  and self.__scrolly_exist == True:
+            self.__check_h = int(event.height)
+            self.__check_w = int(event.width) + self.__bar_w
 
-        elif self.frame_w > event.width:
-            self.window_fr['width'] = self.frame_w
-            self.canvas['width'] = self.frame_w
+        else:
+            self.__check_h = int(event.height)
+            self.__check_w = int(event.width)
+
+
+        self.invoke_resize()
 
         # print('On Resize Event')
         # print('self.scrolly_lock: ', self.scrolly_lock)
@@ -95,21 +101,30 @@ class ScrolledCanvas():
         # print('self.frame_w, self.resize_event_w: ', self.frame_w, self.resize_event_w)
         # print('Scroll Lock: ', self.scrolly_lock)
 
-        if self.frame_h <= self.resize_event_h:
+        if self.frame_h < self.__check_h:
             self.window_fr['height'] = self.resize_event_h
             self.canvas['height'] = self.resize_event_h
             self.scrolly_lock = True
 
-        elif self.frame_h > self.resize_event_h:
+        elif self.frame_h > self.__check_h:
             self.window_fr['height'] = self.frame_h
             self.canvas['height'] = self.frame_h
             self.scrolly_lock = False
 
-        if self.frame_w <= self.resize_event_w:
+        elif self.frame_h == self.__check_h:
+            self.window_fr['height'] = self.frame_h
+            self.canvas['height'] = self.frame_h
+            self.scrolly_lock = True
+
+        if self.frame_w < self.__check_w:
             self.window_fr['width'] = self.resize_event_w
             self.canvas['width'] = self.resize_event_w
 
-        elif self.frame_w > self.resize_event_w:
+        elif self.frame_w > self.__check_w:
+            self.window_fr['width'] = self.frame_w
+            self.canvas['width'] = self.frame_w
+
+        elif self.frame_w == self.__check_w:
             self.window_fr['width'] = self.frame_w
             self.canvas['width'] = self.frame_w
 
@@ -128,9 +143,10 @@ class ScrolledCanvas():
         self.canvas.bind_all("<MouseWheel>", self.dummy_callback)
 
     def dummy_callback(self, event = None):
-        pass
+        return "break"
 
     def _on_mousewheel(self, event):
+        # print(self.frame_h, self.__check_h, self.scrolly_lock)
         if self.scrolly_lock == False:
             self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
             # print(event.delta)
@@ -144,6 +160,9 @@ class ScrolledCanvas():
     def show(self, scroll_x = True, scroll_y = True):
 
         if (type(scroll_x) == bool and type(scroll_y)==bool):
+            self.__scrollx_exist = scroll_x
+            self.__scrolly_exist = scroll_y
+
             if scroll_x == True and scroll_y == True:
                 self.scrollx.place(relx=0, rely=1, relwidth=1, width = -self.__bar_w-self.hbar_x, x = self.hbar_x, y = self.hbar_y, anchor = 'sw')
                 self.scrolly.place(relx=1, rely=0, relheight=1, x = self.vbar_x, y = self.vbar_y, anchor='ne')
@@ -168,6 +187,8 @@ class ScrolledCanvas():
                 self.canvas.place(x=self.canvas_x, y=self.canvas_y,  relheight=1, relwidth=1, anchor = 'nw'
                     , width = -self.canvas_x, height = -self.canvas_y)
             
+            self.scrolly_lock_check()
+
         elif not(type(scroll_x) == bool and type(scroll_y)==bool):
             raise Exception("scroll_x and scroll_y parameter(s) has/have to be a type-bool.")
 
@@ -208,10 +229,13 @@ class ScrolledCanvas():
         return self.frame_w, self.frame_h
 
     def scrolly_lock_check(self):
-        if  self.frame_h <= self.resize_event_h: 
+        if  self.frame_h < self.__check_h: 
             self.scrolly_lock = True
-        elif self.frame_h > self.resize_event_h:
+        elif self.frame_h > self.__check_h:
             self.scrolly_lock = False
+        elif  self.frame_h == self.__check_h: 
+            self.scrolly_lock = True
+        # print(self.frame_h, self.__check_h, self.scrolly_lock)
 
     def scroll_reset(self):
         self.canvas.yview_moveto(0)

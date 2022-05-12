@@ -224,6 +224,7 @@ class LC18_SQ_GUI(tk.Frame):
     def hide(self):
         self.stop_threads()
         self.firmware_version.set('Board Firmware:\n' + "None")
+        self.sq_panel_toplvl.close()
 
     def hmap_param_init(self):
         def hashmap_init(ch_index):

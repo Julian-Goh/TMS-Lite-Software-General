@@ -211,7 +211,8 @@ class LC20_SQ_GUI(tk.Frame):
 
     def hide(self):
         self.stop_threads()
-
+        self.sq_panel_toplvl.close()
+        
     def hmap_param_init(self):
         def hashmap_init(ch_index):
             hashmap = {}

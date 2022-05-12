@@ -37,7 +37,6 @@ import numpy as np
 import cv2
 import imageio
 
-import imutils
 from functools import partial
 import matplotlib
 matplotlib.use('TkAgg')

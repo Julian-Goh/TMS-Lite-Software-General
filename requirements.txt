@@ -9,7 +9,6 @@ pyinstaller==4.10
 matplotlib==3.3.3
 imageio==2.9.0
 openpyxl==3.0.7
-pathlib==1.0.1
 fonttools==4.28.3
 pyserial==3.5
 psutil==5.8.0
